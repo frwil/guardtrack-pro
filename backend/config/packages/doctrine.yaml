@@ -7,7 +7,6 @@ doctrine:
             charset: utf8mb4
             collate: utf8mb4_unicode_ci
         options:
-            options:
             # 1009 correspond à PDO::MYSQL_ATTR_SSL_CA
             1009: '/etc/ssl/certs/ca-certificates.crt'
             # 1014 correspond à PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT
