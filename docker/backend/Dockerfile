@@ -37,14 +37,23 @@ RUN mkdir -p /var/www/html/public /var/log/nginx /var/log/php /run/nginx && \
     chown -R www-data:www-data /var/www/html /var/log/php
 
 WORKDIR /var/www/html
-COPY . .
 
-RUN composer install --no-dev --optimize-autoloader --no-interaction || true
+# Copier le code backend (le contexte est la racine du projet)
+COPY backend/ .
 
+# Installer les dépendances
+RUN composer install --no-dev --optimize-autoloader --no-interaction
+
+# Créer les dossiers nécessaires
 RUN mkdir -p config/jwt var/cache var/log && \
     chown -R www-data:www-data var/cache var/log config/jwt && \
     chmod -R 775 var/cache var/log config/jwt
 
+# Copier et rendre exécutable le script d'entrée
+COPY docker/backend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 80
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

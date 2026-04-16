@@ -1,10 +1,10 @@
 // src/hooks/useActivityLog.ts
 import { useCallback } from 'react';
 import { activityLogService, ActivityAction, ActivityEntity } from '../services/api/activityLog';
-import { useAuth } from './useAuth';
+import { useAuthStore } from '../stores/authStore';
 
 export function useActivityLog() {
-  const { user } = useAuth();
+  const { user } = useAuthStore();
 
   const log = useCallback(async (
     action: ActivityAction,

@@ -1,7 +1,7 @@
-export async function registerServiceWorker() {
+export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | undefined> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     console.log('❌ Service Worker non supporté');
-    return;
+    return undefined;
   }
 
   try {
@@ -38,10 +38,11 @@ export async function registerServiceWorker() {
     return registration;
   } catch (error) {
     console.error('❌ Erreur enregistrement Service Worker:', error);
+    return undefined;
   }
 }
 
-export async function unregisterServiceWorker() {
+export async function unregisterServiceWorker(): Promise<void> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return;
   }
@@ -57,7 +58,7 @@ export async function unregisterServiceWorker() {
   }
 }
 
-export async function clearAllCaches() {
+export async function clearAllCaches(): Promise<boolean> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return false;
   }
@@ -74,10 +75,14 @@ export async function clearAllCaches() {
       // Timeout après 3 secondes
       setTimeout(() => resolve(false), 3000);
       
-      registration.active?.postMessage(
-        { type: 'CLEAR_CACHES' },
-        [messageChannel.port2]
-      );
+      if (registration.active) {
+        registration.active.postMessage(
+          { type: 'CLEAR_CACHES' },
+          [messageChannel.port2]
+        );
+      } else {
+        resolve(false);
+      }
     });
   } catch (error) {
     console.error('Erreur nettoyage caches:', error);
