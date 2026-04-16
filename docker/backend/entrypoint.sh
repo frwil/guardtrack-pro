@@ -3,7 +3,10 @@ set -e
 
 echo "🚀 Starting GuardTrack Backend..."
 
-# Attendre que la base de données soit prête
+# Démarrer supervisord en arrière-plan
+/usr/bin/supervisord -c /etc/supervisord.conf &
+
+# Attendre que la base de données soit prête (en arrière-plan)
 if [ -n "$DATABASE_URL" ]; then
     echo "⏳ Waiting for database..."
     until php bin/console doctrine:query:sql "SELECT 1" > /dev/null 2>&1; do
@@ -28,4 +31,6 @@ php bin/console cache:clear --env=prod
 php bin/console cache:warmup --env=prod
 
 echo "✅ Backend is ready!"
-exec "$@"
+
+# Garder le conteneur en vie
+wait
