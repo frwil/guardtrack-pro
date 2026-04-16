@@ -127,7 +127,6 @@ lerna-debug.log*
 # ============================================================
 # FICHIERS SPÉCIFIQUES PROJET
 # ============================================================
-/composer.lock
 /backend/composer.lock
 /frontend/package-lock.json
 /frontend/yarn.lock
