@@ -61,6 +61,17 @@ export interface ActivityLogStats {
   byDay: number[];
 }
 
+// Fonction utilitaire pour construire les query params
+function buildQueryString(params: Record<string, any>): string {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      searchParams.append(key, String(value));
+    }
+  });
+  return searchParams.toString();
+}
+
 export const activityLogService = {
   /**
    * Enregistre une action utilisateur
@@ -84,8 +95,11 @@ export const activityLogService = {
       const { offlineDB } = await import('../storage/db');
       await offlineDB.addToSyncQueue({
         type: 'CREATE',
-        entity: 'activity_log',
-        data: entry,
+        entity: 'presence', // Utiliser une entité supportée par le type SyncOperation
+        data: {
+          _activityLog: true, // Marqueur pour identifier les logs d'activité
+          ...entry,
+        },
         clientTime: new Date().toISOString(),
         clientTimestamp: Date.now(),
         createdAt: new Date().toISOString(),
@@ -97,7 +111,7 @@ export const activityLogService = {
    * Récupère les logs avec filtres
    */
   async list(filters?: ActivityLogFilters): Promise<{ data: ActivityLogEntry[]; total: number }> {
-    const query = new URLSearchParams(filters as Record<string, string>).toString();
+    const query = filters ? buildQueryString(filters) : '';
     const response = await apiClient.get<{ data: ActivityLogEntry[]; total: number }>(`/activity-logs${query ? `?${query}` : ''}`);
     return response.data || { data: [], total: 0 };
   },
@@ -106,7 +120,7 @@ export const activityLogService = {
    * Récupère les logs d'un utilisateur spécifique
    */
   async getByUser(userId: number, filters?: ActivityLogFilters): Promise<ActivityLogEntry[]> {
-    const query = new URLSearchParams(filters as Record<string, string>).toString();
+    const query = filters ? buildQueryString(filters) : '';
     const response = await apiClient.get<ActivityLogEntry[]>(`/activity-logs/user/${userId}${query ? `?${query}` : ''}`);
     return response.data || [];
   },
@@ -123,7 +137,7 @@ export const activityLogService = {
    * Statistiques des logs
    */
   async getStats(filters?: { startDate?: string; endDate?: string }): Promise<ActivityLogStats | null> {
-    const query = new URLSearchParams(filters as Record<string, string>).toString();
+    const query = filters ? buildQueryString(filters) : '';
     const response = await apiClient.get<ActivityLogStats>(`/activity-logs/stats${query ? `?${query}` : ''}`);
     return response.data || null;
   },
@@ -132,8 +146,19 @@ export const activityLogService = {
    * Export des logs
    */
   async export(format: 'csv' | 'json' | 'pdf', filters?: ActivityLogFilters): Promise<Blob> {
-    const params = new URLSearchParams({ format, ...filters } as Record<string, string>);
-    const response = await fetch(`${apiClient.getCurrentApiUrl()}/activity-logs/export?${params}`, {
+    const params: Record<string, string> = { format };
+    
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params[key] = String(value);
+        }
+      });
+    }
+    
+    const query = new URLSearchParams(params).toString();
+    
+    const response = await fetch(`${apiClient.getCurrentApiUrl()}/activity-logs/export?${query}`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('guardtrack_token')}` },
     });
     return response.blob();

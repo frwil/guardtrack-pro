@@ -150,7 +150,9 @@ export default function AgentRoundsPage() {
           {displayedRounds.length === 0 ? (
             <div className="text-center py-8">
               <span className="text-4xl mb-3 block">📋</span>
-              <p className="text-gray-500">Aucune ronde {activeTab === 'today' ? "aujourd'hui" : activeTab === 'upcoming' ? 'à venir' : 'passée'}</p>
+              <p className="text-gray-500">
+                Aucune ronde {activeTab === 'today' ? "aujourd'hui" : activeTab === 'upcoming' ? 'à venir' : 'passée'}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -272,16 +274,16 @@ export default function AgentRoundsPage() {
                 <div>
                   <h3 className="font-medium mb-2">📍 Sites à visiter</h3>
                   <div className="space-y-2">
-                    {selectedRound.sites?.map((site, index) => (
-                      <div key={site.id} className="flex items-center p-3 bg-gray-50 rounded-lg">
+                    {selectedRound.sites?.map((roundSite, index) => (
+                      <div key={roundSite.id} className="flex items-center p-3 bg-gray-50 rounded-lg">
                         <span className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-sm font-medium mr-3">
                           {index + 1}
                         </span>
                         <div className="flex-1">
-                          <p className="font-medium">{site.name}</p>
-                          <p className="text-sm text-gray-500">{site.address}</p>
+                          <p className="font-medium">{roundSite.site.name}</p>
+                          <p className="text-sm text-gray-500">{roundSite.site.address}</p>
                         </div>
-                        {site.visitedAt ? (
+                        {roundSite.visitedAt ? (
                           <span className="text-green-600">✅ Visitée</span>
                         ) : (
                           <span className="text-gray-400">⏳ En attente</span>
