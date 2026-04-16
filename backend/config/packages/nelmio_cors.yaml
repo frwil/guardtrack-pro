@@ -1,0 +1,40 @@
+# backend/config/packages/nelmio_cors.yaml
+nelmio_cors:
+    defaults:
+        allow_credentials: false
+        allow_origin: []
+        allow_headers: []
+        allow_methods: []
+        expose_headers: []
+        max_age: 0
+        hosts: []
+        origin_regex: false
+        forced_allow_origin_value: ~
+        skip_same_as_origin: true
+
+    paths:
+        '^/api/':
+            allow_origin: 
+                - 'http://localhost:3000'
+                - 'http://127.0.0.1:3000'
+                - 'https://guardtrack.vercel.app'
+                - 'https://app.guardtrack.com'
+                - 'https://www.guardtrack.com'
+            allow_headers: 
+                - 'Content-Type'
+                - 'Authorization'
+                - 'Accept'
+                - 'X-Requested-With'
+                - 'ngrok-skip-browser-warning'
+            allow_methods: 
+                - 'GET'
+                - 'OPTIONS'
+                - 'POST'
+                - 'PUT'
+                - 'PATCH'
+                - 'DELETE'
+            expose_headers: 
+                - 'Link'
+                - 'X-Total-Count'
+            max_age: 3600
+            allow_credentials: true

@@ -1,0 +1,15 @@
+guardtrack-pro/
+├── docker/
+│   ├── backend/
+│   │   └── Dockerfile
+│   ├── frontend/
+│   │   └── Dockerfile
+│   └── mysql/
+│       └── init.sql
+├── backend/
+│   └── (Symfony sera installé ici)
+├── frontend/
+│   └── (Next.js sera installé ici)
+├── docker-compose.yml
+├── .env
+└── Makefile (optionnel, pour simplifier les commandes)

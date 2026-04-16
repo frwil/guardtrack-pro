@@ -1,0 +1,135 @@
+# ============================================================
+# ENVIRONNEMENT
+# ============================================================
+/.env
+/.env.*
+!.env.example
+/backend/.env
+/backend/.env.*
+!backend/.env.example
+/frontend/.env
+/frontend/.env.*
+!frontend/.env.example
+
+# ============================================================
+# DÉPENDANCES
+# ============================================================
+/vendor
+/backend/vendor
+/node_modules
+/frontend/node_modules
+
+# ============================================================
+# BUILDS ET CACHE
+# ============================================================
+/frontend/.next
+/frontend/out
+/frontend/build
+/frontend/dist
+/backend/var
+/backend/var/cache
+/backend/var/log
+/backend/var/sessions
+
+# ============================================================
+# DOCKER
+# ============================================================
+/docker
+/docker-compose.yml
+/docker-compose.*.yml
+!docker-compose.example.yml
+
+# ============================================================
+# SCRIPTS TEMPORAIRES
+# ============================================================
+/create-entities.ps1
+/create-entities-part*.ps1
+/start.ps1
+/start.sh
+
+# ============================================================
+# DÉPLOIEMENT
+# ============================================================
+/northflank.yaml
+/vercel.json
+/deploiement.md
+/structure de synchronisation.txt
+
+# ============================================================
+# IDE
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================================
+# FICHIERS VOLUMINEUX (Git LFS)
+# ============================================================
+*.node
+*.exe
+*.dll
+*.so
+*.dylib
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.rar
+
+# ============================================================
+# LOGS
+# ============================================================
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ============================================================
+# UPLOADS ET MÉDIAS
+# ============================================================
+/backend/public/uploads/
+/backend/var/uploads/
+/frontend/public/uploads/
+
+# ============================================================
+# CLÉS ET CERTIFICATS
+# ============================================================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+/backend/config/jwt/*.pem
+!backend/config/jwt/.gitkeep
+
+# ============================================================
+# BACKUPS
+# ============================================================
+*.backup
+*.bak
+/backups/
+
+# ============================================================
+# TESTS
+# ============================================================
+/coverage/
+/.nyc_output/
+/backend/var/coverage/
+/frontend/coverage/
+
+# ============================================================
+# FICHIERS SPÉCIFIQUES PROJET
+# ============================================================
+/composer.lock
+/backend/composer.lock
+/frontend/package-lock.json
+/frontend/yarn.lock
+/frontend/pnpm-lock.yaml

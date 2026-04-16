@@ -1,0 +1,37 @@
+security:
+    password_hashers:
+        Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
+        App\Entity\User:
+            algorithm: auto
+
+    providers:
+        app_user_provider:
+            entity:
+                class: App\Entity\User
+                property: email
+
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+
+        # API firewall - tout passe par JWT
+        api:
+            pattern: ^/api
+            stateless: true
+            jwt: ~
+            provider: app_user_provider
+
+    access_control:
+        # Routes publiques
+        - { path: ^/api/ping, roles: PUBLIC_ACCESS }
+        - { path: ^/api/test, roles: PUBLIC_ACCESS }
+        - { path: ^/api/settings/public, roles: PUBLIC_ACCESS }  # ✅ Settings publics
+        
+        # Routes authentifiées (tous rôles)
+        - { path: ^/api/settings$, roles: IS_AUTHENTICATED_FULLY, methods: [GET] }  # ✅ Lecture settings
+        - { path: ^/api/settings/ai/providers, roles: IS_AUTHENTICATED_FULLY, methods: [GET] }
+        
+        # Routes Admin uniquement
+        - { path: ^/api/settings, roles: ROLE_ADMIN, methods: [PUT, POST] }
+        - { path: ^/api/settings/ai/test, roles: ROLE_ADMIN, methods: [POST] }

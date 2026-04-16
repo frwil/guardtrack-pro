@@ -1,0 +1,309 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useAuthStore } from '../../../../src/stores/authStore';
+import { roundsService, Round } from '../../../../src/services/api/rounds';
+import Link from 'next/link';
+
+export default function AgentRoundsPage() {
+  const { user } = useAuthStore();
+  const [rounds, setRounds] = useState<Round[]>([]);
+  const [todayRounds, setTodayRounds] = useState<Round[]>([]);
+  const [upcomingRounds, setUpcomingRounds] = useState<Round[]>([]);
+  const [pastRounds, setPastRounds] = useState<Round[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'past'>('today');
+  const [selectedRound, setSelectedRound] = useState<Round | null>(null);
+  const [showRoundDetail, setShowRoundDetail] = useState(false);
+
+  useEffect(() => {
+    loadRounds();
+  }, []);
+
+  const loadRounds = async () => {
+    setIsLoading(true);
+    try {
+      const [allRounds, today] = await Promise.all([
+        roundsService.getMyRounds(),
+        roundsService.getToday(),
+      ]);
+      
+      setRounds(allRounds);
+      setTodayRounds(today);
+      
+      const now = new Date();
+      
+      // Rondes à venir
+      const upcoming = allRounds.filter(r => 
+        r.status === 'PLANNED' && new Date(r.scheduledStart) > now
+      );
+      setUpcomingRounds(upcoming);
+      
+      // Rondes passées
+      const past = allRounds.filter(r => 
+        ['COMPLETED', 'CANCELLED'].includes(r.status)
+      );
+      setPastRounds(past);
+    } catch (error) {
+      console.error('Erreur de chargement:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const badges: Record<string, { color: string; text: string; icon: string }> = {
+      PLANNED: { color: 'bg-blue-100 text-blue-800', text: 'Planifiée', icon: '📋' },
+      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', text: 'En cours', icon: '🔄' },
+      COMPLETED: { color: 'bg-green-100 text-green-800', text: 'Terminée', icon: '✅' },
+      CANCELLED: { color: 'bg-red-100 text-red-800', text: 'Annulée', icon: '❌' },
+    };
+    return badges[status] || { color: 'bg-gray-100 text-gray-800', text: status, icon: '📌' };
+  };
+
+  const getProgressColor = (progress: number) => {
+    if (progress >= 80) return 'bg-green-500';
+    if (progress >= 50) return 'bg-yellow-500';
+    return 'bg-blue-500';
+  };
+
+  const displayedRounds = activeTab === 'today' ? todayRounds 
+    : activeTab === 'upcoming' ? upcomingRounds 
+    : pastRounds;
+
+  const handleStartRound = async (roundId: number) => {
+    const success = await roundsService.start(roundId);
+    if (success) {
+      loadRounds();
+    }
+  };
+
+  const handleViewDetail = (round: Round) => {
+    setSelectedRound(round);
+    setShowRoundDetail(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-gray-600">Chargement des rondes...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* En-tête */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+          <span className="mr-3">🔄</span>
+          Mes rondes
+        </h1>
+        <p className="text-gray-600 mt-1">
+          Gérez vos rondes de surveillance
+        </p>
+      </div>
+
+      {/* Statistiques */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg shadow p-4">
+          <p className="text-sm text-gray-500">Aujourd'hui</p>
+          <p className="text-2xl font-bold text-blue-600">{todayRounds.length}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <p className="text-sm text-gray-500">À venir</p>
+          <p className="text-2xl font-bold text-indigo-600">{upcomingRounds.length}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <p className="text-sm text-gray-500">Terminées</p>
+          <p className="text-2xl font-bold text-green-600">{pastRounds.length}</p>
+        </div>
+      </div>
+
+      {/* Onglets */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="border-b">
+          <div className="flex">
+            {(['today', 'upcoming', 'past'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-6 py-3 text-sm font-medium transition-colors ${
+                  activeTab === tab
+                    ? 'text-indigo-600 border-b-2 border-indigo-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {tab === 'today' && '📅 Aujourd\'hui'}
+                {tab === 'upcoming' && '⏳ À venir'}
+                {tab === 'past' && '✅ Passées'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Liste des rondes */}
+        <div className="p-6">
+          {displayedRounds.length === 0 ? (
+            <div className="text-center py-8">
+              <span className="text-4xl mb-3 block">📋</span>
+              <p className="text-gray-500">Aucune ronde {activeTab === 'today' ? "aujourd'hui" : activeTab === 'upcoming' ? 'à venir' : 'passée'}</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {displayedRounds.map((round) => {
+                const statusBadge = getStatusBadge(round.status);
+                const progress = round.sitesCount > 0 
+                  ? Math.round((round.visitedSitesCount / round.sitesCount) * 100)
+                  : 0;
+                
+                return (
+                  <div key={round.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center mb-2">
+                          <h3 className="font-semibold text-gray-900">{round.name}</h3>
+                          <span className={`ml-3 px-2 py-1 rounded-full text-xs ${statusBadge.color}`}>
+                            {statusBadge.icon} {statusBadge.text}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 mt-3">
+                          <div>
+                            <p className="text-xs text-gray-500">Début prévu</p>
+                            <p className="text-sm">{new Date(round.scheduledStart).toLocaleString('fr-FR')}</p>
+                          </div>
+                          {round.scheduledEnd && (
+                            <div>
+                              <p className="text-xs text-gray-500">Fin prévue</p>
+                              <p className="text-sm">{new Date(round.scheduledEnd).toLocaleString('fr-FR')}</p>
+                            </div>
+                          )}
+                          {round.actualStart && (
+                            <div>
+                              <p className="text-xs text-gray-500">Début réel</p>
+                              <p className="text-sm">{new Date(round.actualStart).toLocaleString('fr-FR')}</p>
+                            </div>
+                          )}
+                          {round.actualEnd && (
+                            <div>
+                              <p className="text-xs text-gray-500">Fin réelle</p>
+                              <p className="text-sm">{new Date(round.actualEnd).toLocaleString('fr-FR')}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Progression */}
+                        {round.status === 'IN_PROGRESS' && (
+                          <div className="mt-4">
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span>Progression</span>
+                              <span>{round.visitedSitesCount}/{round.sitesCount} sites</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`${getProgressColor(progress)} h-2 rounded-full transition-all`}
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {round.supervisor && (
+                          <p className="text-xs text-gray-500 mt-3">
+                            👤 Superviseur : {round.supervisor.fullName}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="ml-4 flex flex-col space-y-2">
+                        {round.status === 'PLANNED' && (
+                          <button
+                            onClick={() => handleStartRound(round.id)}
+                            className="px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                          >
+                            ▶️ Démarrer
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleViewDetail(round)}
+                          className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200"
+                        >
+                          👁️ Détails
+                        </button>
+                        {round.status === 'IN_PROGRESS' && (
+                          <Link
+                            href={`/dashboard/agent/rounds/${round.id}/visit`}
+                            className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 text-center"
+                          >
+                            📍 Visiter
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal détail */}
+      {showRoundDetail && selectedRound && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">{selectedRound.name}</h2>
+                <button
+                  onClick={() => setShowRoundDetail(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Sites à visiter */}
+                <div>
+                  <h3 className="font-medium mb-2">📍 Sites à visiter</h3>
+                  <div className="space-y-2">
+                    {selectedRound.sites?.map((site, index) => (
+                      <div key={site.id} className="flex items-center p-3 bg-gray-50 rounded-lg">
+                        <span className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-sm font-medium mr-3">
+                          {index + 1}
+                        </span>
+                        <div className="flex-1">
+                          <p className="font-medium">{site.name}</p>
+                          <p className="text-sm text-gray-500">{site.address}</p>
+                        </div>
+                        {site.visitedAt ? (
+                          <span className="text-green-600">✅ Visitée</span>
+                        ) : (
+                          <span className="text-gray-400">⏳ En attente</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowRoundDetail(false)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
