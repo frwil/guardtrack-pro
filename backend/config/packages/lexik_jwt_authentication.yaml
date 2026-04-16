@@ -1,6 +1,10 @@
 lexik_jwt_authentication:
-    secret_key: '%env(resolve:JWT_SECRET_KEY)%'
-    public_key: '%env(resolve:JWT_PUBLIC_KEY)%'
+    secret_key:
+        type: env
+        resolve: '%env(base64:JWT_SECRET_KEY)%'
+    public_key:
+        type: env
+        resolve: '%env(base64:JWT_PUBLIC_KEY)%'
     pass_phrase: '%env(JWT_PASSPHRASE)%'
     token_ttl: 3600
     clock_skew: 0
@@ -22,5 +26,5 @@ lexik_jwt_authentication:
             lifetime: 3600
             samesite: lax
             path: /
-            secure: false  # true en production
+            secure: true  # true en production (HTTPS)
             httpOnly: true
