@@ -50,22 +50,29 @@ RUN mkdir -p /var/www/html/public /var/log/nginx /var/log/php /run/nginx && \
 WORKDIR /var/www/html
 
 # ============================================================
-# ÉTAPE 1 : Copier les fichiers de dépendances et installer
-# ============================================================
-COPY backend/composer.json backend/composer.lock* ./
-
-# Installer les dépendances (sans le code source pour optimiser le cache)
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --prefer-dist
-
-# ============================================================
-# ÉTAPE 2 : Copier le reste du code source
+# ÉTAPE 1 : Copier TOUT le code backend d'abord
 # ============================================================
 COPY backend/ .
 
-# Exécuter les scripts post-installation
-RUN composer dump-autoload --optimize --no-dev --classmap-authoritative
+# DEBUG : Vérifier que composer.json est présent
+RUN echo "=== DEBUG: Checking composer.json ===" && \
+    ls -la /var/www/html/composer.json || echo "ERROR: composer.json not found"
 
-# Créer les dossiers nécessaires pour Symfony
+# ============================================================
+# ÉTAPE 2 : Installer les dépendances
+# ============================================================
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+# DEBUG : Vérifier que vendor a été créé
+RUN echo "=== DEBUG: Checking vendor ===" && \
+    ls -la /var/www/html/vendor/autoload_runtime.php || echo "ERROR: vendor not created properly"
+
+# DEBUG : Vérifier le contenu de vendor
+RUN ls -la /var/www/html/vendor/ | head -20
+
+# ============================================================
+# ÉTAPE 3 : Permissions
+# ============================================================
 RUN mkdir -p config/jwt var/cache var/log && \
     chown -R www-data:www-data var/cache var/log config/jwt && \
     chmod -R 775 var/cache var/log config/jwt
