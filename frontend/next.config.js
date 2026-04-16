@@ -14,12 +14,15 @@ const nextConfig = {
     ],
   },
   
-  // Rewrites pour l'API
+  // Rewrites pour l'API - Proxy pour éviter CORS
   async rewrites() {
+    // URL de l'API en production (Northflank)
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000/api';
+    
     return [
       {
         source: '/api/:path*',
-        destination: 'http://backend:8000/api/:path*',
+        destination: `${API_URL}/:path*`,
       },
     ]
   },
@@ -58,7 +61,6 @@ const nextConfig = {
     return config;
   },
   
-  // Désactiver le mode strict pour éviter certains warnings
   reactStrictMode: true,
   
   // Configuration des images
