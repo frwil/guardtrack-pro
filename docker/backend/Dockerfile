@@ -53,43 +53,44 @@ WORKDIR /var/www/html
 # Copier le code
 COPY backend/ .
 
-# ============================================================
-# DIAGNOSTIC AVANT INSTALLATION
-# ============================================================
-RUN echo "=== DEBUG: Current directory contents ===" && \
-    ls -la
-
-RUN echo "=== DEBUG: composer.json exists? ===" && \
-    ls -la composer.json
-
-RUN echo "=== DEBUG: composer.lock exists? ===" && \
-    ls -la composer.lock
-
 # Installer les dépendances
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist -vvv
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
 # ============================================================
-# DIAGNOSTIC APRÈS INSTALLATION
+# CRÉER MANUELLEMENT autoload_runtime.php
 # ============================================================
-RUN echo "=== DEBUG: Checking if vendor was created ===" && \
-    ls -la vendor/ 2>/dev/null || echo "❌ vendor directory NOT created"
+RUN cat > vendor/autoload_runtime.php << 'EOF'
+<?php
 
-RUN echo "=== DEBUG: Vendor directory tree (first 3 levels) ===" && \
-    tree -L 2 vendor/ 2>/dev/null || find vendor/ -maxdepth 2 -type d 2>/dev/null | head -30
+// Manually created autoload_runtime.php for Symfony Runtime compatibility
 
-RUN echo "=== DEBUG: Looking for autoload files ===" && \
-    find vendor/ -name "autoload*.php" 2>/dev/null
+if (true === (require_once __DIR__.'/autoload.php') || empty($_SERVER['SCRIPT_FILENAME'])) {
+    return;
+}
 
-RUN echo "=== DEBUG: Looking for symfony/runtime ===" && \
-    find vendor/ -path "*/symfony/runtime*" 2>/dev/null | head -10
+if (!class_exists('Symfony\Component\Runtime\SymfonyRuntime')) {
+    // Fallback : utiliser l'autoload standard
+    require_once __DIR__.'/autoload.php';
+    return;
+}
 
-RUN echo "=== DEBUG: Composer vendor status ===" && \
-    composer show --installed 2>/dev/null | head -30
+use Symfony\Component\Runtime\SymfonyRuntime;
+
+return function (array $context = []) {
+    return new SymfonyRuntime($context);
+};
+EOF
+
+# Vérifier que le fichier a été créé
+RUN echo "=== VÉRIFICATION autoload_runtime.php ===" && \
+    ls -la vendor/autoload_runtime.php && \
+    echo "✅ autoload_runtime.php créé avec succès"
 
 # Permissions
 RUN mkdir -p config/jwt var/cache var/log && \
     chown -R www-data:www-data var/cache var/log config/jwt && \
-    chmod -R 775 var/cache var/log config/jwt
+    chmod -R 775 var/cache var/log config/jwt && \
+    chmod 644 vendor/autoload_runtime.php
 
 # Copier et rendre exécutable le script d'entrée
 COPY docker/backend/entrypoint.sh /entrypoint.sh
