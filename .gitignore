@@ -34,7 +34,6 @@
 # ============================================================
 # DOCKER
 # ============================================================
-/docker
 /docker-compose.yml
 /docker-compose.*.yml
 !docker-compose.example.yml
