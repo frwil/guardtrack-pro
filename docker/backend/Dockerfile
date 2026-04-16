@@ -16,7 +16,8 @@ RUN apk update && apk add --no-cache \
     fcgi \
     openssl \
     libpng-dev \
-    libxml2-dev
+    libxml2-dev \
+    tree
 
 # Installation des extensions PHP
 RUN docker-php-ext-install \
@@ -52,14 +53,38 @@ WORKDIR /var/www/html
 # Copier le code
 COPY backend/ .
 
+# ============================================================
+# DIAGNOSTIC AVANT INSTALLATION
+# ============================================================
+RUN echo "=== DEBUG: Current directory contents ===" && \
+    ls -la
+
+RUN echo "=== DEBUG: composer.json exists? ===" && \
+    ls -la composer.json
+
+RUN echo "=== DEBUG: composer.lock exists? ===" && \
+    ls -la composer.lock
+
 # Installer les dépendances
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist -vvv
 
-# Forcer la régénération de l'autoload avec classmap
-RUN composer dump-autoload --optimize --classmap-authoritative
+# ============================================================
+# DIAGNOSTIC APRÈS INSTALLATION
+# ============================================================
+RUN echo "=== DEBUG: Checking if vendor was created ===" && \
+    ls -la vendor/ 2>/dev/null || echo "❌ vendor directory NOT created"
 
-# Vérifier que autoload_runtime.php existe maintenant
-RUN ls -la vendor/autoload_runtime.php || echo "⚠️ Still missing - will use fallback"
+RUN echo "=== DEBUG: Vendor directory tree (first 3 levels) ===" && \
+    tree -L 2 vendor/ 2>/dev/null || find vendor/ -maxdepth 2 -type d 2>/dev/null | head -30
+
+RUN echo "=== DEBUG: Looking for autoload files ===" && \
+    find vendor/ -name "autoload*.php" 2>/dev/null
+
+RUN echo "=== DEBUG: Looking for symfony/runtime ===" && \
+    find vendor/ -path "*/symfony/runtime*" 2>/dev/null | head -10
+
+RUN echo "=== DEBUG: Composer vendor status ===" && \
+    composer show --installed 2>/dev/null | head -30
 
 # Permissions
 RUN mkdir -p config/jwt var/cache var/log && \
