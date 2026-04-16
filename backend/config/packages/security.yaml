@@ -36,6 +36,7 @@ security:
         - { path: ^/api/auth/login, roles: PUBLIC_ACCESS }
         - { path: ^/api/auth/register, roles: PUBLIC_ACCESS }
         - { path: ^/api/auth/refresh, roles: PUBLIC_ACCESS }
+        - { path: ^/api/auth/verify-pin, roles: PUBLIC_ACCESS, methods: [POST, OPTIONS] }
         
         # Routes authentifiées (tous rôles)
         - { path: ^/api/settings$, roles: IS_AUTHENTICATED_FULLY, methods: [GET] }
