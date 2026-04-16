@@ -38,11 +38,19 @@ RUN mkdir -p /var/www/html/public /var/log/nginx /var/log/php /run/nginx && \
 
 WORKDIR /var/www/html
 
-# Copier le code backend (le contexte est la racine du projet)
+# Copier le code backend
 COPY backend/ .
 
-# Installer les dépendances
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Vérifier que composer.json existe
+RUN ls -la /var/www/html/composer.json
+
+# Installer les dépendances AVEC un fallback si échec
+RUN composer install --no-dev --optimize-autoloader --no-interaction || \
+    (echo "⚠️ Composer install failed, retrying with update..." && \
+     composer update --no-dev --optimize-autoloader --no-interaction)
+
+# Vérifier que vendor existe
+RUN ls -la /var/www/html/vendor/autoload_runtime.php || echo "⚠️ autoload_runtime.php not found"
 
 # Créer les dossiers nécessaires
 RUN mkdir -p config/jwt var/cache var/log && \
