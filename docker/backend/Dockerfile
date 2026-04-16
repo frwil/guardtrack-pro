@@ -4,8 +4,6 @@ FROM php:8.3-fpm-alpine
 RUN apk update && apk add --no-cache \
     git \
     curl \
-    libpng-dev \
-    libxml2-dev \
     zip \
     unzip \
     icu-dev \
@@ -16,7 +14,9 @@ RUN apk update && apk add --no-cache \
     nginx \
     supervisor \
     fcgi \
-    openssl
+    openssl \
+    libpng-dev \
+    libxml2-dev
 
 # Installation des extensions PHP
 RUN docker-php-ext-install \
@@ -49,30 +49,19 @@ RUN mkdir -p /var/www/html/public /var/log/nginx /var/log/php /run/nginx && \
 
 WORKDIR /var/www/html
 
-# ============================================================
-# ÉTAPE 1 : Copier TOUT le code backend d'abord
-# ============================================================
+# Copier le code
 COPY backend/ .
 
-# DEBUG : Vérifier que composer.json est présent
-RUN echo "=== DEBUG: Checking composer.json ===" && \
-    ls -la /var/www/html/composer.json || echo "ERROR: composer.json not found"
-
-# ============================================================
-# ÉTAPE 2 : Installer les dépendances
-# ============================================================
+# Installer les dépendances
 RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
-# DEBUG : Vérifier que vendor a été créé
-RUN echo "=== DEBUG: Checking vendor ===" && \
-    ls -la /var/www/html/vendor/autoload_runtime.php || echo "ERROR: vendor not created properly"
+# Forcer la régénération de l'autoload avec classmap
+RUN composer dump-autoload --optimize --classmap-authoritative
 
-# DEBUG : Vérifier le contenu de vendor
-RUN ls -la /var/www/html/vendor/ | head -20
+# Vérifier que autoload_runtime.php existe maintenant
+RUN ls -la vendor/autoload_runtime.php || echo "⚠️ Still missing - will use fallback"
 
-# ============================================================
-# ÉTAPE 3 : Permissions
-# ============================================================
+# Permissions
 RUN mkdir -p config/jwt var/cache var/log && \
     chown -R www-data:www-data var/cache var/log config/jwt && \
     chmod -R 775 var/cache var/log config/jwt
