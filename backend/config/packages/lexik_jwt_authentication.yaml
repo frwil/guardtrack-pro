@@ -1,11 +1,11 @@
 lexik_jwt_authentication:
-    secret_key: '%env(base64:JWT_SECRET_KEY)%'
-    public_key: '%env(base64:JWT_PUBLIC_KEY)%'
+    secret_key_path: '%kernel.project_dir%/config/jwt/private.pem'
+    public_key_path: '%kernel.project_dir%/config/jwt/public.pem'
     pass_phrase: '%env(JWT_PASSPHRASE)%'
     token_ttl: 3600
     clock_skew: 0
-    user_id_claim: email  
-    
+    user_id_claim: email
+
     token_extractors:
         authorization_header:
             enabled: true

@@ -15,10 +15,25 @@ if [ -n "$DATABASE_URL" ]; then
     echo "✅ Database is ready"
 fi
 
+# Définir JWT_PASSPHRASE par défaut si non défini
+if [ -z "$JWT_PASSPHRASE" ]; then
+    export JWT_PASSPHRASE="default_passphrase"
+    echo "⚠️ JWT_PASSPHRASE not set, using default"
+fi
+
+# Créer le répertoire config/jwt s'il n'existe pas
+mkdir -p config/jwt
+
 # Générer les clés JWT si elles n'existent pas
 if [ ! -f "config/jwt/private.pem" ]; then
     echo "🔑 Generating JWT keys..."
     php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction || echo "⚠️ JWT key generation failed, continuing..."
+fi
+
+# Vérifier que les clés ont été générées
+if [ ! -f "config/jwt/private.pem" ] || [ ! -f "config/jwt/public.pem" ]; then
+    echo "❌ JWT keys are missing! Trying to generate with passphrase..."
+    php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction
 fi
 
 # Exécuter les migrations
