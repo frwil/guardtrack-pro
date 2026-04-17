@@ -3,9 +3,6 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "regions": ["cdg1"],
-  "deploymentProtection": {
-    "excludedRoutes": ["/api/:path*"]
-  },
   "env": {
     "NEXT_PUBLIC_API_URL": "https://guardtrack.alwaysdata.net/api",
     "NEXT_PUBLIC_MERCURE_URL": "https://mercure.guardtrack.com/.well-known/mercure",
