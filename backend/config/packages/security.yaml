@@ -15,13 +15,16 @@ security:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
 
-        # Firewall pour les routes publiques (sans authentification)
-        public:
-            pattern: ^/api/(ping|test|settings/public|auth/(login|register|refresh))
+        ping:
+            pattern: ^/ping
             stateless: true
             security: false
 
-        # API firewall - tout le reste passe par JWT
+        public:
+            pattern: ^/api/(ping|test|settings/public|auth/(login|register|refresh|verify-pin))
+            stateless: true
+            security: false
+
         api:
             pattern: ^/api
             stateless: true
@@ -29,7 +32,7 @@ security:
             provider: app_user_provider
 
     access_control:
-        # Routes publiques (déjà gérées par le firewall public)
+        - { path: ^/ping, roles: PUBLIC_ACCESS }
         - { path: ^/api/ping, roles: PUBLIC_ACCESS }
         - { path: ^/api/test, roles: PUBLIC_ACCESS }
         - { path: ^/api/settings/public, roles: PUBLIC_ACCESS }
@@ -37,11 +40,7 @@ security:
         - { path: ^/api/auth/register, roles: PUBLIC_ACCESS }
         - { path: ^/api/auth/refresh, roles: PUBLIC_ACCESS }
         - { path: ^/api/auth/verify-pin, roles: PUBLIC_ACCESS, methods: [POST, OPTIONS] }
-        
-        # Routes authentifiées (tous rôles)
         - { path: ^/api/settings$, roles: IS_AUTHENTICATED_FULLY, methods: [GET] }
         - { path: ^/api/settings/ai/providers, roles: IS_AUTHENTICATED_FULLY, methods: [GET] }
-        
-        # Routes Admin uniquement
         - { path: ^/api/settings, roles: ROLE_ADMIN, methods: [PUT, POST] }
         - { path: ^/api/settings/ai/test, roles: ROLE_ADMIN, methods: [POST] }
