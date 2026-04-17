@@ -11,3 +11,13 @@ services:
             - '../src/DependencyInjection/'
             - '../src/Entity/'
             - '../src/Kernel.php'
+
+    # Make core services public for testing and direct access
+    security.password_hasher:
+        public: true
+
+    Doctrine\ORM\EntityManagerInterface:
+        public: true
+
+    Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface:
+        public: true
