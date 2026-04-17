@@ -22,34 +22,78 @@ if [ -z "$JWT_PASSPHRASE" ]; then
 fi
 
 # Créer le répertoire config/jwt s'il n'existe pas
+echo "Ensuring config/jwt directory exists and is writable..."
 mkdir -p config/jwt
 chmod 777 config/jwt
 
+# Vérifier que le répertoire est accessible
+if [ ! -w config/jwt ]; then
+    echo "⚠️ config/jwt is not writable, attempting to fix permissions..."
+    chmod 777 config/jwt
+    [ -w config/jwt ] && echo "✅ Fixed" || echo "❌ Still not writable"
+fi
+
 # Générer les clés JWT si elles n'existent pas
 if [ ! -f "config/jwt/private.pem" ] || [ ! -f "config/jwt/public.pem" ]; then
-    echo "🔑 Generating JWT keys using Symfony console..."
+    echo "🔑 Generating JWT keys..."
+
+    # Debug: Vérifier les outils disponibles
+    echo "Checking available tools..."
+    which openssl && echo "✅ OpenSSL found" || echo "❌ OpenSSL not found"
+    which php && echo "✅ PHP found" || echo "❌ PHP not found"
 
     # Essayer avec php bin/console d'abord
-    if php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction 2>/dev/null; then
+    if php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction 2>&1; then
         echo "✅ Keys generated with Symfony console"
     else
-        echo "⚠️ Symfony console failed, using OpenSSL directly..."
+        echo "⚠️ Symfony console failed, trying OpenSSL..."
 
-        # Fallback: générer avec OpenSSL
-        openssl genrsa -out config/jwt/private.pem -aes256 -passout pass:"${JWT_PASSPHRASE}" 4096 2>/dev/null || \
-        openssl genrsa -out config/jwt/private.pem 4096 2>/dev/null
+        # Fallback: générer avec OpenSSL (sans passphrase d'abord)
+        if openssl genrsa -out config/jwt/private.pem 4096 2>&1; then
+            echo "✅ Private key generated"
 
-        openssl rsa -pubout -in config/jwt/private.pem -out config/jwt/public.pem -passin pass:"${JWT_PASSPHRASE}" 2>/dev/null || \
-        openssl rsa -pubout -in config/jwt/private.pem -out config/jwt/public.pem 2>/dev/null
+            if openssl rsa -pubout -in config/jwt/private.pem -out config/jwt/public.pem 2>&1; then
+                echo "✅ Public key generated"
+            else
+                echo "❌ Failed to generate public key"
+                cat config/jwt/private.pem
+            fi
+        else
+            echo "❌ Failed to generate private key with OpenSSL"
+            openssl version
+        fi
     fi
 fi
 
 # Vérifier que les clés ont été générées
 if [ ! -f "config/jwt/private.pem" ] || [ ! -f "config/jwt/public.pem" ]; then
-    echo "❌ ERROR: JWT keys generation failed!"
-    echo "Debug: Listing config/jwt contents:"
-    ls -la config/jwt/ || echo "Directory doesn't exist"
-    exit 1
+    echo "❌ JWT key generation failed!"
+    echo "Directory contents:"
+    ls -la config/jwt/ 2>/dev/null || echo "Directory doesn't exist"
+
+    echo ""
+    echo "Last resort: Creating minimal test keys (FOR DEVELOPMENT ONLY)..."
+    # Generate a simple RSA key pair for testing
+    (cd config/jwt && php -r '
+    $config = array(
+        "private_key_bits" => 2048,
+        "private_key_type" => OPENSSL_KEYTYPE_RSA,
+    );
+    $res = openssl_pkey_new($config);
+    openssl_pkey_export($res, $privKey);
+    $pubKey = openssl_pkey_get_details($res);
+    $pubKey = $pubKey["key"];
+    file_put_contents("private.pem", $privKey);
+    file_put_contents("public.pem", $pubKey);
+    echo "✅ Generated test keys with PHP openssl extension\n";
+    ' 2>&1) || {
+        echo "⚠️ Even PHP openssl failed. Application will not start without valid JWT keys."
+        echo "Please ensure:"
+        echo "  1. OpenSSL is installed in the container"
+        echo "  2. config/jwt directory is writable"
+        echo "  3. PHP openssl extension is enabled"
+        exit 1
+    }
 fi
 
 # Corriger les permissions
