@@ -16,15 +16,10 @@ const nextConfig = {
   
   // Rewrites pour l'API - Proxy pour éviter CORS
   async rewrites() {
-    // URL de l'API en production (Northflank)
-    const API_URL = process.env.NEXT_PUBLIC_API_URL?.startsWith('/') 
-      ? 'https://p01--guardtrack-pro--96wvzhf85lqw.code.run/api'
-      : (process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000/api');
-    
     return [
       {
         source: '/api/:path*',
-        destination: `${API_URL}/:path*`,
+        destination: 'https://guardtrack.alwaysdata.net/api/:path*',
       },
     ]
   },
@@ -92,24 +87,6 @@ const nextConfig = {
           {
             key: 'X-XSS-Protection',
             value: '1; mode=block',
-          },
-        ],
-      },
-      // Headers pour les rewrites d'API - autoriser les CORS
-      {
-        source: '/api/:path*',
-        headers: [
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: '*',
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization, Accept',
           },
         ],
       },
