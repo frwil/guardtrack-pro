@@ -89,7 +89,7 @@ RUN echo "=== VÉRIFICATION autoload_runtime.php ===" && \
 # Permissions
 RUN mkdir -p config/jwt var/cache var/log && \
     chown -R www-data:www-data var/cache var/log config/jwt && \
-    chmod -R 775 var/cache var/log config/jwt && \
+    chmod -R 777 var/cache var/log config/jwt && \
     chmod 644 vendor/autoload_runtime.php
 
 # Copier et rendre exécutable le script d'entrée

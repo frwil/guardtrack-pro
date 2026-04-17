@@ -23,18 +23,38 @@ fi
 
 # Créer le répertoire config/jwt s'il n'existe pas
 mkdir -p config/jwt
+chmod 777 config/jwt
 
 # Générer les clés JWT si elles n'existent pas
 if [ ! -f "config/jwt/private.pem" ] || [ ! -f "config/jwt/public.pem" ]; then
-    echo "🔑 Generating JWT keys..."
-    php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction
+    echo "🔑 Generating JWT keys using Symfony console..."
+
+    # Essayer avec php bin/console d'abord
+    if php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction 2>/dev/null; then
+        echo "✅ Keys generated with Symfony console"
+    else
+        echo "⚠️ Symfony console failed, using OpenSSL directly..."
+
+        # Fallback: générer avec OpenSSL
+        openssl genrsa -out config/jwt/private.pem -aes256 -passout pass:"${JWT_PASSPHRASE}" 4096 2>/dev/null || \
+        openssl genrsa -out config/jwt/private.pem 4096 2>/dev/null
+
+        openssl rsa -pubout -in config/jwt/private.pem -out config/jwt/public.pem -passin pass:"${JWT_PASSPHRASE}" 2>/dev/null || \
+        openssl rsa -pubout -in config/jwt/private.pem -out config/jwt/public.pem 2>/dev/null
+    fi
 fi
 
 # Vérifier que les clés ont été générées
 if [ ! -f "config/jwt/private.pem" ] || [ ! -f "config/jwt/public.pem" ]; then
     echo "❌ ERROR: JWT keys generation failed!"
+    echo "Debug: Listing config/jwt contents:"
+    ls -la config/jwt/ || echo "Directory doesn't exist"
     exit 1
 fi
+
+# Corriger les permissions
+chmod 644 config/jwt/private.pem config/jwt/public.pem
+echo "✅ JWT keys ready"
 
 # Exporter les clés comme variables d'environnement en base64
 echo "📝 Exporting JWT keys as environment variables..."
