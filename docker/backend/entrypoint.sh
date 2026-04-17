@@ -17,7 +17,7 @@ fi
 
 # Définir JWT_PASSPHRASE par défaut si non défini
 if [ -z "$JWT_PASSPHRASE" ]; then
-    export JWT_PASSPHRASE="default_passphrase"
+    export JWT_PASSPHRASE="default_passphrase_change_me_in_production"
     echo "⚠️ JWT_PASSPHRASE not set, using default"
 fi
 
@@ -25,16 +25,29 @@ fi
 mkdir -p config/jwt
 
 # Générer les clés JWT si elles n'existent pas
-if [ ! -f "config/jwt/private.pem" ]; then
+if [ ! -f "config/jwt/private.pem" ] || [ ! -f "config/jwt/public.pem" ]; then
     echo "🔑 Generating JWT keys..."
-    php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction || echo "⚠️ JWT key generation failed, continuing..."
+    php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction
 fi
 
 # Vérifier que les clés ont été générées
 if [ ! -f "config/jwt/private.pem" ] || [ ! -f "config/jwt/public.pem" ]; then
-    echo "❌ JWT keys are missing! Trying to generate with passphrase..."
-    php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction
+    echo "❌ ERROR: JWT keys generation failed!"
+    exit 1
 fi
+
+# Exporter les clés comme variables d'environnement en base64
+echo "📝 Exporting JWT keys as environment variables..."
+export JWT_SECRET_KEY="$(cat config/jwt/private.pem | base64 -w 0)"
+export JWT_PUBLIC_KEY="$(cat config/jwt/public.pem | base64 -w 0)"
+
+# Vérifier que les variables sont définies
+if [ -z "$JWT_SECRET_KEY" ] || [ -z "$JWT_PUBLIC_KEY" ]; then
+    echo "❌ ERROR: Failed to export JWT keys as environment variables!"
+    exit 1
+fi
+
+echo "✅ JWT keys exported successfully"
 
 # Exécuter les migrations
 echo "🔄 Running database migrations..."
