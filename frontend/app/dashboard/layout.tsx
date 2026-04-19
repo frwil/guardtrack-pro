@@ -118,9 +118,9 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      {/* Contenu principal */}
+      {/* Contenu principal - AJOUT DE pb-20 SUR MOBILE */}
       <main
-        className={`lg:ml-64 p-4 lg:p-8 ${networkStatus !== "online" && networkStatus !== undefined ? "pt-12" : ""}`}
+        className={`lg:ml-64 p-4 lg:p-8 pb-20 lg:pb-8 ${networkStatus !== "online" && networkStatus !== undefined ? "pt-12" : ""}`}
       >
         {/* Barre mobile avec notifications */}
         <div className="lg:hidden mb-4 flex items-center justify-between bg-white p-4 rounded-lg shadow">
@@ -148,7 +148,7 @@ export default function DashboardLayout({
       </main>
 
       {/* Navigation mobile bottom */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-40">
         <div className="flex justify-around p-2">
           {navigation.slice(0, 5).map((item) => (
             <Link
