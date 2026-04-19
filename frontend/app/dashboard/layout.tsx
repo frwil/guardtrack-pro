@@ -120,7 +120,7 @@ export default function DashboardLayout({
 
       {/* Contenu principal - AJOUT DE pb-20 SUR MOBILE */}
       <main
-        className={`lg:ml-64 p-4 lg:p-8 pb-20 lg:pb-8 ${networkStatus !== "online" && networkStatus !== undefined ? "pt-12" : ""}`}
+        className={`lg:ml-64 p-4 lg:p-8 pb-25 lg:pb-8 ${networkStatus !== "online" && networkStatus !== undefined ? "pt-12" : ""}`}
       >
         {/* Barre mobile avec notifications */}
         <div className="lg:hidden mb-4 flex items-center justify-between bg-white p-4 rounded-lg shadow">
