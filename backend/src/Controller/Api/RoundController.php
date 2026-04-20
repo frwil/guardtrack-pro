@@ -102,6 +102,7 @@ class RoundController extends AbstractController
 
         // ✅ Assigner le contrôleur connecté comme superviseur
         if ($currentUser && in_array(User::ROLE_CONTROLEUR, $currentUser->getRoles())) {
+            dd($currentUser->getRoles());
             $round->setSupervisor($currentUser);
         }
 
