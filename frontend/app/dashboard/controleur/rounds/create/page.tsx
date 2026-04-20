@@ -11,7 +11,6 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { serverTime } from "../../../../../src/services/time/serverTime";
 import { offlineDB } from "../../../../../src/services/storage/db";
 import { networkMonitor } from "../../../../../src/services/network/monitor";
-import { syncManager } from "../../../../../src/services/sync/manager";
 import {
   faArrowLeft,
   faSave,
@@ -26,7 +25,6 @@ import {
   faSearch,
   faExclamationTriangle,
   faPlay,
-  faClock,
   faInfoCircle,
 } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
@@ -39,11 +37,11 @@ export default function CreateRoundPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // ✅ MODIFICATION : Ne stocker que les sites avec assignation active
+
   const [availableSites, setAvailableSites] = useState<any[]>([]);
   const [sitesWithoutAgent, setSitesWithoutAgent] = useState<any[]>([]);
-  
+  const [siteAgentMap, setSiteAgentMap] = useState<Map<number, any>>(new Map());
+
   const [selectedSites, setSelectedSites] = useState<any[]>([]);
   const [showSiteSelector, setShowSiteSelector] = useState(false);
   const [searchSite, setSearchSite] = useState("");
@@ -68,21 +66,21 @@ export default function CreateRoundPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // 1. Récupérer tous les sites actifs
       const sitesList = await sitesService.list({ isActive: true });
-      
-      // 2. Récupérer les assignations actives
       const assignments = await assignmentsService.getActive();
-      
-      // 3. Créer un Set des IDs de sites qui ont une assignation active
+
+      const agentMap = new Map<number, any>();
       const sitesWithActiveAgent = new Set<number>();
+
       assignments.forEach((assignment: any) => {
         if (assignment.site?.id && assignment.agent) {
           sitesWithActiveAgent.add(assignment.site.id);
+          agentMap.set(assignment.site.id, assignment.agent);
         }
       });
 
-      // 4. Séparer les sites avec et sans agent
+      setSiteAgentMap(agentMap);
+
       const withAgent: any[] = [];
       const withoutAgent: any[] = [];
 
@@ -119,6 +117,10 @@ export default function CreateRoundPage() {
     }
 
     setFilteredSites(filtered);
+  };
+
+  const getAgentForSite = (siteId: number) => {
+    return siteAgentMap.get(siteId);
   };
 
   const handleAddSite = (site: any) => {
@@ -188,7 +190,6 @@ export default function CreateRoundPage() {
       };
 
       if (networkMonitor.isSyncAllowed() && serverTime.isSynced()) {
-        // Mode online
         const result = await roundsService.create(roundData);
 
         if (result) {
@@ -198,7 +199,6 @@ export default function CreateRoundPage() {
           router.push("/dashboard/controleur/rounds");
         }
       } else {
-        // Mode offline
         const localId = `round_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         await offlineDB.addToSyncQueue({
@@ -280,7 +280,7 @@ export default function CreateRoundPage() {
         </p>
       </div>
 
-      {/* ✅ NOUVEAU : Message d'avertissement pour les sites sans agent */}
+      {/* Message d'avertissement pour les sites sans agent */}
       {sitesWithoutAgent.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-start">
@@ -317,7 +317,7 @@ export default function CreateRoundPage() {
         </div>
       )}
 
-      {/* ✅ MODIFICATION : Message si aucun site disponible */}
+      {/* Message si aucun site disponible */}
       {availableSites.length === 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 text-center">
           <FontAwesomeIcon
@@ -401,7 +401,7 @@ export default function CreateRoundPage() {
         </div>
       </div>
 
-      {/* Formulaire - désactivé si aucun site disponible */}
+      {/* Formulaire */}
       <div className={`bg-white rounded-lg shadow p-6 ${availableSites.length === 0 ? 'opacity-50 pointer-events-none' : ''}`}>
         <form
           onSubmit={(e) => handleSubmit(e, creationMode)}
@@ -465,47 +465,54 @@ export default function CreateRoundPage() {
                   {selectedSites.length > 1 ? "s" : ""} sélectionné
                   {selectedSites.length > 1 ? "s" : ""} (dans l'ordre de visite)
                 </p>
-                {selectedSites.map((site, index) => (
-                  <div
-                    key={site.id}
-                    className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg"
-                  >
-                    <div className="flex items-center flex-1">
-                      <span className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-medium mr-3">
-                        {index + 1}
-                      </span>
-                      <div className="flex-1">
-                        <p className="font-medium">{site.name}</p>
-                        <p className="text-sm text-gray-500">{site.address}</p>
+                {selectedSites.map((site, index) => {
+                  const agent = getAgentForSite(site.id);
+                  return (
+                    <div
+                      key={site.id}
+                      className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg"
+                    >
+                      <div className="flex items-center flex-1">
+                        <span className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-medium mr-3">
+                          {index + 1}
+                        </span>
+                        <div className="flex-1">
+                          <p className="font-medium">{site.name}</p>
+                          <p className="text-sm text-gray-500">{site.address}</p>
+                          <p className="text-xs text-green-600 mt-1">
+                            <FontAwesomeIcon icon={faUser} className="mr-1" />
+                            Agent : {agent ? agent.fullName : "Non trouvé"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 ml-4">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveSite(index, "up")}
+                          disabled={index === 0}
+                          className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                        >
+                          <FontAwesomeIcon icon={faChevronUp} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveSite(index, "down")}
+                          disabled={index === selectedSites.length - 1}
+                          className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                        >
+                          <FontAwesomeIcon icon={faChevronDown} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSite(site.id)}
+                          className="p-1 text-red-500 hover:text-red-700"
+                        >
+                          <FontAwesomeIcon icon={faTrash} />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2 ml-4">
-                      <button
-                        type="button"
-                        onClick={() => handleMoveSite(index, "up")}
-                        disabled={index === 0}
-                        className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
-                      >
-                        <FontAwesomeIcon icon={faChevronUp} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMoveSite(index, "down")}
-                        disabled={index === selectedSites.length - 1}
-                        className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
-                      >
-                        <FontAwesomeIcon icon={faChevronDown} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSite(site.id)}
-                        className="p-1 text-red-500 hover:text-red-700"
-                      >
-                        <FontAwesomeIcon icon={faTrash} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -611,26 +618,29 @@ export default function CreateRoundPage() {
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {filteredSites.map((site) => (
-                    <button
-                      key={site.id}
-                      type="button"
-                      onClick={() => handleAddSite(site)}
-                      className="w-full text-left p-4 border rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-all"
-                    >
-                      <p className="font-medium">{site.name}</p>
-                      <p className="text-sm text-gray-500">{site.address}</p>
-                      {site.client && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          Client : {site.client.name}
+                  {filteredSites.map((site) => {
+                    const agent = getAgentForSite(site.id);
+                    return (
+                      <button
+                        key={site.id}
+                        type="button"
+                        onClick={() => handleAddSite(site)}
+                        className="w-full text-left p-4 border rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-all"
+                      >
+                        <p className="font-medium">{site.name}</p>
+                        <p className="text-sm text-gray-500">{site.address}</p>
+                        {site.client && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            Client : {site.client.name}
+                          </p>
+                        )}
+                        <p className="text-xs mt-1 flex items-center text-green-600">
+                          <FontAwesomeIcon icon={faUser} className="mr-1" />
+                          Agent : {agent ? agent.fullName : "Aucun agent assigné"}
                         </p>
-                      )}
-                      <p className="text-xs mt-1 flex items-center text-green-600">
-                        <FontAwesomeIcon icon={faUser} className="mr-1" />
-                        Agent : {site.agent ? site.agent.name : "Aucun agent assigné"}
-                      </p>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

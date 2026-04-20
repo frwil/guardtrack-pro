@@ -100,8 +100,8 @@ class RoundController extends AbstractController
         $round->setScheduledEnd(isset($data['scheduledEnd']) ? new \DateTimeImmutable($data['scheduledEnd']) : null);
         $round->setStatus('PLANNED');
 
-        // ✅ Assigner le contrôleur connecté comme superviseur
-        if ($currentUser && in_array(User::ROLE_CONTROLEUR, $currentUser->getRoles())) {
+        // ✅ Assigner le contrôleur connecté comme superviseur (version corrigée)
+        if ($currentUser) {
             $round->setSupervisor($currentUser);
         }
 
