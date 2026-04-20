@@ -27,7 +27,9 @@ import {
   faExclamationTriangle,
   faPlay,
   faClock,
+  faInfoCircle,
 } from "@fortawesome/free-solid-svg-icons";
+import Link from "next/link";
 
 type CreationMode = "plan" | "start";
 
@@ -37,10 +39,11 @@ export default function CreateRoundPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [allSites, setAllSites] = useState<any[]>([]);
-  const [sitesWithAgents, setSitesWithAgents] = useState<Map<number, any>>(
-    new Map(),
-  );
+  
+  // ✅ MODIFICATION : Ne stocker que les sites avec assignation active
+  const [availableSites, setAvailableSites] = useState<any[]>([]);
+  const [sitesWithoutAgent, setSitesWithoutAgent] = useState<any[]>([]);
+  
   const [selectedSites, setSelectedSites] = useState<any[]>([]);
   const [showSiteSelector, setShowSiteSelector] = useState(false);
   const [searchSite, setSearchSite] = useState("");
@@ -60,27 +63,40 @@ export default function CreateRoundPage() {
 
   useEffect(() => {
     filterSites();
-  }, [searchSite, allSites, selectedSites]);
+  }, [searchSite, availableSites, selectedSites]);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
+      // 1. Récupérer tous les sites actifs
       const sitesList = await sitesService.list({ isActive: true });
-      setAllSites(sitesList);
-      setFilteredSites(sitesList);
-
+      
+      // 2. Récupérer les assignations actives
       const assignments = await assignmentsService.getActive();
-      const siteAgentMap = new Map<number, any>();
-
+      
+      // 3. Créer un Set des IDs de sites qui ont une assignation active
+      const sitesWithActiveAgent = new Set<number>();
       assignments.forEach((assignment: any) => {
         if (assignment.site?.id && assignment.agent) {
-          if (!siteAgentMap.has(assignment.site.id)) {
-            siteAgentMap.set(assignment.site.id, assignment.agent);
-          }
+          sitesWithActiveAgent.add(assignment.site.id);
         }
       });
 
-      setSitesWithAgents(siteAgentMap);
+      // 4. Séparer les sites avec et sans agent
+      const withAgent: any[] = [];
+      const withoutAgent: any[] = [];
+
+      sitesList.forEach((site: any) => {
+        if (sitesWithActiveAgent.has(site.id)) {
+          withAgent.push(site);
+        } else {
+          withoutAgent.push(site);
+        }
+      });
+
+      setAvailableSites(withAgent);
+      setSitesWithoutAgent(withoutAgent);
+      setFilteredSites(withAgent);
     } catch (error) {
       console.error("Erreur de chargement:", error);
     } finally {
@@ -89,7 +105,7 @@ export default function CreateRoundPage() {
   };
 
   const filterSites = () => {
-    let filtered = allSites.filter(
+    let filtered = availableSites.filter(
       (site) => !selectedSites.find((s) => s.id === site.id),
     );
 
@@ -106,12 +122,6 @@ export default function CreateRoundPage() {
   };
 
   const handleAddSite = (site: any) => {
-    if (!sitesWithAgents.has(site.id)) {
-      alert(
-        `Attention : Le site "${site.name}" n'a pas d'agent assigné actuellement.`,
-      );
-    }
-
     setSelectedSites((prev) => [...prev, site]);
     setShowSiteSelector(false);
     setSearchSite("");
@@ -147,13 +157,6 @@ export default function CreateRoundPage() {
       newErrors.sites = "Veuillez sélectionner au moins un site";
     }
 
-    const sitesWithoutAgent = selectedSites.filter(
-      (site) => !sitesWithAgents.has(site.id),
-    );
-    if (sitesWithoutAgent.length > 0) {
-      newErrors.sites = `Les sites suivants n'ont pas d'agent assigné : ${sitesWithoutAgent.map((s) => s.name).join(", ")}`;
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -172,7 +175,6 @@ export default function CreateRoundPage() {
       const roundData = {
         name: formData.name,
         scheduledStart: formData.scheduledStart,
-        // ✅ agentId n'est plus nécessaire - sera déduit du premier site
         sites: selectedSites.map((site) => ({ id: site.id })),
       };
 
@@ -190,7 +192,6 @@ export default function CreateRoundPage() {
         const result = await roundsService.create(roundData);
 
         if (result) {
-          // Si mode "Démarrer maintenant", on démarre la ronde
           if (mode === "start" && result.id) {
             await roundsService.startAsController(result.id);
           }
@@ -215,14 +216,12 @@ export default function CreateRoundPage() {
           createdAt: new Date().toISOString(),
         });
 
-        // ✅ Correction : Si mode "Démarrer maintenant", on ajoute l'opération de démarrage
-        // Note: Le démarrage sera effectué après la synchronisation de la création
         if (mode === "start") {
           await offlineDB.addToSyncQueue({
             type: "START_ROUND",
             entity: "round",
             data: {
-              localId, // Référence à la ronde créée localement
+              localId,
               _operationTime: operationTime,
             },
             clientTime: operationTime.clientTime,
@@ -247,10 +246,6 @@ export default function CreateRoundPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const getAgentForSite = (siteId: number) => {
-    return sitesWithAgents.get(siteId);
   };
 
   if (isLoading) {
@@ -284,6 +279,65 @@ export default function CreateRoundPage() {
           L'agent est automatiquement déduit du site sélectionné
         </p>
       </div>
+
+      {/* ✅ NOUVEAU : Message d'avertissement pour les sites sans agent */}
+      {sitesWithoutAgent.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <FontAwesomeIcon
+              icon={faInfoCircle}
+              className="text-yellow-600 mr-3 mt-1"
+            />
+            <div>
+              <p className="font-medium text-yellow-800 mb-1">
+                {sitesWithoutAgent.length} site(s) sans agent assigné
+              </p>
+              <p className="text-sm text-yellow-700">
+                Les sites suivants n'ont pas d'agent assigné actuellement et ne peuvent pas être inclus dans une ronde :
+              </p>
+              <ul className="mt-2 text-sm text-yellow-700 list-disc list-inside">
+                {sitesWithoutAgent.slice(0, 5).map((site) => (
+                  <li key={site.id}>{site.name}</li>
+                ))}
+                {sitesWithoutAgent.length > 5 && (
+                  <li>et {sitesWithoutAgent.length - 5} autre(s)...</li>
+                )}
+              </ul>
+              <p className="text-sm text-yellow-700 mt-3">
+                <Link
+                  href="/dashboard/superviseur/assignments/create"
+                  className="text-indigo-600 hover:underline font-medium"
+                >
+                  Créer une assignation →
+                </Link>{" "}
+                pour ces sites afin de pouvoir les utiliser dans une ronde.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ MODIFICATION : Message si aucun site disponible */}
+      {availableSites.length === 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 text-center">
+          <FontAwesomeIcon
+            icon={faExclamationTriangle}
+            className="text-4xl text-orange-500 mb-3"
+          />
+          <p className="font-medium text-orange-800 mb-2">
+            Aucun site avec agent assigné disponible
+          </p>
+          <p className="text-sm text-orange-700 mb-4">
+            Vous devez d'abord créer des assignations d'agents sur des sites avant de pouvoir créer une ronde.
+          </p>
+          <Link
+            href="/dashboard/superviseur/assignments/create"
+            className="inline-block px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
+            Créer une assignation
+          </Link>
+        </div>
+      )}
 
       {/* Choix du mode de création */}
       <div className="bg-white rounded-lg shadow p-4">
@@ -347,8 +401,8 @@ export default function CreateRoundPage() {
         </div>
       </div>
 
-      {/* Formulaire */}
-      <div className="bg-white rounded-lg shadow p-6">
+      {/* Formulaire - désactivé si aucun site disponible */}
+      <div className={`bg-white rounded-lg shadow p-6 ${availableSites.length === 0 ? 'opacity-50 pointer-events-none' : ''}`}>
         <form
           onSubmit={(e) => handleSubmit(e, creationMode)}
           className="space-y-6"
@@ -378,8 +432,7 @@ export default function CreateRoundPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <FontAwesomeIcon icon={faCalendar} className="mr-2" />
-              Date et heure{" "}
-              {creationMode === "plan" ? "de début *" : "de début *"}
+              Date et heure de début *
             </label>
             <input
               type="datetime-local"
@@ -412,81 +465,55 @@ export default function CreateRoundPage() {
                   {selectedSites.length > 1 ? "s" : ""} sélectionné
                   {selectedSites.length > 1 ? "s" : ""} (dans l'ordre de visite)
                 </p>
-                {selectedSites.map((site, index) => {
-                  const agent = getAgentForSite(site.id);
-                  const hasAgent = !!agent;
-
-                  return (
-                    <div
-                      key={site.id}
-                      className={`flex items-center justify-between p-3 rounded-lg ${
-                        hasAgent
-                          ? "bg-gray-50"
-                          : "bg-yellow-50 border border-yellow-200"
-                      }`}
-                    >
-                      <div className="flex items-center flex-1">
-                        <span className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-medium mr-3">
-                          {index + 1}
-                        </span>
-                        <div className="flex-1">
-                          <p className="font-medium">{site.name}</p>
-                          <p className="text-sm text-gray-500">
-                            {site.address}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1 flex items-center">
-                            <FontAwesomeIcon icon={faUser} className="mr-1" />
-                            {hasAgent ? (
-                              <span className="text-green-600">
-                                Agent : {agent.fullName}
-                              </span>
-                            ) : (
-                              <span className="text-yellow-600 flex items-center">
-                                <FontAwesomeIcon
-                                  icon={faExclamationTriangle}
-                                  className="mr-1"
-                                />
-                                Aucun agent assigné
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2 ml-4">
-                        <button
-                          type="button"
-                          onClick={() => handleMoveSite(index, "up")}
-                          disabled={index === 0}
-                          className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
-                        >
-                          <FontAwesomeIcon icon={faChevronUp} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleMoveSite(index, "down")}
-                          disabled={index === selectedSites.length - 1}
-                          className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
-                        >
-                          <FontAwesomeIcon icon={faChevronDown} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSite(site.id)}
-                          className="p-1 text-red-500 hover:text-red-700"
-                        >
-                          <FontAwesomeIcon icon={faTrash} />
-                        </button>
+                {selectedSites.map((site, index) => (
+                  <div
+                    key={site.id}
+                    className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg"
+                  >
+                    <div className="flex items-center flex-1">
+                      <span className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-medium mr-3">
+                        {index + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="font-medium">{site.name}</p>
+                        <p className="text-sm text-gray-500">{site.address}</p>
                       </div>
                     </div>
-                  );
-                })}
+                    <div className="flex items-center space-x-2 ml-4">
+                      <button
+                        type="button"
+                        onClick={() => handleMoveSite(index, "up")}
+                        disabled={index === 0}
+                        className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                      >
+                        <FontAwesomeIcon icon={faChevronUp} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMoveSite(index, "down")}
+                        disabled={index === selectedSites.length - 1}
+                        className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                      >
+                        <FontAwesomeIcon icon={faChevronDown} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSite(site.id)}
+                        className="p-1 text-red-500 hover:text-red-700"
+                      >
+                        <FontAwesomeIcon icon={faTrash} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
             <button
               type="button"
               onClick={() => setShowSiteSelector(true)}
-              className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors flex items-center justify-center"
+              disabled={availableSites.length === 0}
+              className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors flex items-center justify-center disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:text-gray-500"
             >
               <FontAwesomeIcon icon={faPlus} className="mr-2" />
               Ajouter un site
@@ -513,7 +540,7 @@ export default function CreateRoundPage() {
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || availableSites.length === 0}
               className={`px-6 py-3 text-white rounded-lg disabled:opacity-50 flex items-center ${
                 creationMode === "start"
                   ? "bg-green-600 hover:bg-green-700"
@@ -558,6 +585,9 @@ export default function CreateRoundPage() {
                   ✕
                 </button>
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Seuls les sites avec un agent assigné sont affichés
+              </p>
               <div className="mt-3 relative">
                 <FontAwesomeIcon
                   icon={faSearch}
@@ -581,41 +611,26 @@ export default function CreateRoundPage() {
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {filteredSites.map((site) => {
-                    const agent = getAgentForSite(site.id);
-
-                    return (
-                      <button
-                        key={site.id}
-                        type="button"
-                        onClick={() => handleAddSite(site)}
-                        className="w-full text-left p-4 border rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-all"
-                      >
-                        <p className="font-medium">{site.name}</p>
-                        <p className="text-sm text-gray-500">{site.address}</p>
-                        {site.client && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            Client : {site.client.name}
-                          </p>
-                        )}
-                        <p className="text-xs mt-1 flex items-center">
-                          <FontAwesomeIcon
-                            icon={faUser}
-                            className="mr-1 text-gray-400"
-                          />
-                          {agent ? (
-                            <span className="text-green-600">
-                              Agent assigné : {agent.fullName}
-                            </span>
-                          ) : (
-                            <span className="text-yellow-600">
-                              ⚠️ Aucun agent assigné
-                            </span>
-                          )}
+                  {filteredSites.map((site) => (
+                    <button
+                      key={site.id}
+                      type="button"
+                      onClick={() => handleAddSite(site)}
+                      className="w-full text-left p-4 border rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-all"
+                    >
+                      <p className="font-medium">{site.name}</p>
+                      <p className="text-sm text-gray-500">{site.address}</p>
+                      {site.client && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Client : {site.client.name}
                         </p>
-                      </button>
-                    );
-                  })}
+                      )}
+                      <p className="text-xs mt-1 flex items-center text-green-600">
+                        <FontAwesomeIcon icon={faUser} className="mr-1" />
+                        Agent assigné présent
+                      </p>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
