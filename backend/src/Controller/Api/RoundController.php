@@ -66,9 +66,12 @@ class RoundController extends AbstractController
     public function create(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
+
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+
         $agentId = $data['agentId'] ?? null;
         if (!$agentId && isset($data['sites']) && !empty($data['sites'])) {
-            // Récupérer l'agent du premier site via les assignations actives
             $firstSiteId = $data['sites'][0]['id'] ?? null;
             if ($firstSiteId) {
                 $assignment = $this->assignmentRepository->findOneBy([
@@ -97,6 +100,12 @@ class RoundController extends AbstractController
         $round->setScheduledEnd(isset($data['scheduledEnd']) ? new \DateTimeImmutable($data['scheduledEnd']) : null);
         $round->setStatus('PLANNED');
 
+        // ✅ Assigner le contrôleur connecté comme superviseur
+        if ($currentUser && in_array(User::ROLE_CONTROLEUR, $currentUser->getRoles())) {
+            $round->setSupervisor($currentUser);
+        }
+
+        // Si un supervisorId est explicitement fourni, il écrase le contrôleur connecté
         if (isset($data['supervisorId'])) {
             $supervisor = $this->userRepository->find($data['supervisorId']);
             if ($supervisor) {
@@ -125,6 +134,15 @@ class RoundController extends AbstractController
         return $this->json([
             'id' => $round->getId(),
             'name' => $round->getName(),
+            'agent' => $round->getAgent() ? [
+                'id' => $round->getAgent()->getId(),
+                'fullName' => $round->getAgent()->getFullName(),
+            ] : null,
+            'supervisor' => $round->getSupervisor() ? [
+                'id' => $round->getSupervisor()->getId(),
+                'fullName' => $round->getSupervisor()->getFullName(),
+            ] : null,
+            'sitesCount' => $round->getRoundSites()->count(),
         ], Response::HTTP_CREATED);
     }
 

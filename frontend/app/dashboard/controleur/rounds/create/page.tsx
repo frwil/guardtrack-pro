@@ -627,7 +627,7 @@ export default function CreateRoundPage() {
                       )}
                       <p className="text-xs mt-1 flex items-center text-green-600">
                         <FontAwesomeIcon icon={faUser} className="mr-1" />
-                        Agent assigné présent
+                        Agent : {site.agent ? site.agent.name : "Aucun agent assigné"}
                       </p>
                     </button>
                   ))}
