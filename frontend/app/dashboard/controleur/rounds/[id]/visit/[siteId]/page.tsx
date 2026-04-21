@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { roundsService } from "../../../../../../../src/services/api/rounds";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -22,7 +22,12 @@ import {
   faRobot,
   faUsers,
   faUserTie,
+  faRotate,
+  faLightbulb,
 } from "@fortawesome/free-solid-svg-icons";
+
+// Import dynamique pour jsQR
+let jsQR: any = null;
 
 type Step =
   | "geoloc"
@@ -59,9 +64,41 @@ export default function ControllerVisitPage() {
   const [comments, setComments] = useState("");
   const [smartSuggestions, setSmartSuggestions] = useState<string[]>([]);
 
+  // Scanner QR code
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [hasCamera, setHasCamera] = useState(true);
+  const [torchEnabled, setTorchEnabled] = useState(false);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">(
+    "environment",
+  );
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanIntervalRef = useRef<any>(null);
+
   useEffect(() => {
     loadRoundSite();
+    // Charger jsQR dynamiquement
+    import("jsqr").then((module) => {
+      jsQR = module.default;
+    });
+
+    return () => {
+      stopCamera();
+      if (scanIntervalRef.current) {
+        cancelAnimationFrame(scanIntervalRef.current);
+      }
+    };
   }, []);
+
+  useEffect(() => {
+    if (currentStep === "qr") {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+  }, [currentStep, facingMode]);
 
   const loadRoundSite = async () => {
     const round = await roundsService.getById(roundId);
@@ -69,7 +106,9 @@ export default function ControllerVisitPage() {
     setRoundSite(site);
   };
 
-  // Étape 1 : Géolocalisation automatique
+  // ============================================================
+  // ÉTAPE 1 : GÉOLOCALISATION
+  // ============================================================
   const getGeolocation = () => {
     setIsLoading(true);
     if (!navigator.geolocation) {
@@ -80,8 +119,8 @@ export default function ControllerVisitPage() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const siteLat = parseFloat(roundSite?.latitude || "0");
-        const siteLon = parseFloat(roundSite?.longitude || "0");
+        const siteLat = parseFloat(roundSite?.site?.latitude || "0");
+        const siteLon = parseFloat(roundSite?.site?.longitude || "0");
         const distance = calculateDistance(
           position.coords.latitude,
           position.coords.longitude,
@@ -94,7 +133,8 @@ export default function ControllerVisitPage() {
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
           distance,
-          withinGeofence: distance <= (roundSite?.geofencingRadius || 100),
+          withinGeofence:
+            distance <= (roundSite?.site?.geofencingRadius || 100),
         });
         setIsLoading(false);
       },
@@ -125,9 +165,117 @@ export default function ControllerVisitPage() {
     return R * c;
   };
 
-  // Étape 2 : Scan QR code
+  // ============================================================
+  // ÉTAPE 2 : SCAN QR CODE
+  // ============================================================
+  const startCamera = async () => {
+    setIsCameraLoading(true);
+    try {
+      const constraints: MediaTrackConstraints = {
+        facingMode: facingMode,
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: constraints,
+      });
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.play();
+      }
+      setHasCamera(true);
+      setIsScanning(true);
+      scanQRCode();
+    } catch (err) {
+      console.error("Erreur caméra:", err);
+      setHasCamera(false);
+    } finally {
+      setIsCameraLoading(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setIsScanning(false);
+  };
+
+  const toggleTorch = async () => {
+    if (streamRef.current) {
+      const videoTrack = streamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        try {
+          // Vérifier si la torche est supportée
+          const capabilities = videoTrack.getCapabilities();
+          if ("torch" in capabilities) {
+            await videoTrack.applyConstraints({
+              advanced: [{ torch: !torchEnabled } as any],
+            });
+            setTorchEnabled(!torchEnabled);
+          } else {
+            console.warn("Torche non supportée sur cet appareil");
+          }
+        } catch (err) {
+          console.error("Erreur torche:", err);
+        }
+      }
+    }
+  };
+  const switchCamera = () => {
+    stopCamera();
+    setFacingMode(facingMode === "environment" ? "user" : "environment");
+  };
+
+  const scanQRCode = () => {
+    if (!isScanning) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!video || !canvas || !jsQR) {
+      scanIntervalRef.current = requestAnimationFrame(scanQRCode);
+      return;
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      scanIntervalRef.current = requestAnimationFrame(scanQRCode);
+      return;
+    }
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+
+      if (code) {
+        setQrCode(code.data);
+        // Validation automatique
+        if (code.data === roundSite?.site?.qrCode) {
+          setQrValidated(true);
+          setError(null);
+        } else {
+          setError("QR code invalide pour ce site");
+        }
+        stopCamera();
+        return;
+      }
+    }
+
+    scanIntervalRef.current = requestAnimationFrame(scanQRCode);
+  };
+
   const validateQrCode = () => {
-    if (qrCode === roundSite?.qrCode) {
+    if (qrCode === roundSite?.site?.qrCode) {
       setQrValidated(true);
       setError(null);
     } else {
@@ -135,9 +283,10 @@ export default function ControllerVisitPage() {
     }
   };
 
-  // Étape 3 : Code PIN contrôleur
+  // ============================================================
+  // ÉTAPE 3 : CODE PIN
+  // ============================================================
   const validatePin = () => {
-    // À implémenter avec vérification backend
     if (pinCode.length === 5) {
       setCurrentStep("photo");
     } else {
@@ -145,16 +294,16 @@ export default function ControllerVisitPage() {
     }
   };
 
-  // Étape 4 : Photo
+  // ============================================================
+  // ÉTAPE 4 : PHOTO
+  // ============================================================
   const capturePhoto = async () => {
-    // Similaire à l'agent
+    // À implémenter
   };
 
-  const analyzePhoto = async (photoData: string) => {
-    // Utiliser le même service IA que l'agent
-  };
-
-  // Étape 5 : Statut de présence de l'agent
+  // ============================================================
+  // ÉTAPE 5 : STATUT DE PRÉSENCE
+  // ============================================================
   const presenceOptions = [
     {
       value: "PRESENT",
@@ -178,13 +327,14 @@ export default function ControllerVisitPage() {
     { value: "INCONNUE", label: "Raison inconnue" },
   ];
 
-  // Étape 7 : Soumission finale
+  // ============================================================
+  // ÉTAPE 7 : SOUMISSION
+  // ============================================================
   const handleSubmit = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Validation
       if (!agentPresenceStatus) {
         setError("Veuillez sélectionner le statut de l'agent");
         setIsLoading(false);
@@ -197,7 +347,6 @@ export default function ControllerVisitPage() {
         return;
       }
 
-      // Préparer les données en convertissant null en undefined
       const visitData = {
         gpsLatitude: geolocation?.latitude ?? undefined,
         gpsLongitude: geolocation?.longitude ?? undefined,
@@ -215,7 +364,6 @@ export default function ControllerVisitPage() {
       };
 
       await roundsService.controllerVisitSite(roundId, siteId, visitData);
-
       router.push(`/dashboard/controleur/rounds/${roundId}`);
     } catch (error) {
       console.error("Erreur soumission:", error);
@@ -225,7 +373,9 @@ export default function ControllerVisitPage() {
     }
   };
 
-  // Rendu du formulaire multi-étapes
+  // ============================================================
+  // RENDU
+  // ============================================================
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Barre de progression */}
@@ -315,31 +465,140 @@ export default function ControllerVisitPage() {
               />
               Scan QR Code
             </h2>
-            <input
-              type="text"
-              value={qrCode}
-              onChange={(e) => setQrCode(e.target.value)}
-              placeholder="Scannez ou entrez le QR code"
-              className="w-full px-4 py-3 border rounded-lg"
-            />
-            {error && <p className="text-red-600">{error}</p>}
-            <div className="flex justify-between">
+
+            <p className="text-sm text-gray-600">
+              Scannez le QR code affiché sur le site
+            </p>
+
+            {/* Scanner de QR code */}
+            {hasCamera ? (
+              <div className="space-y-3">
+                <div
+                  className="relative bg-black rounded-lg overflow-hidden"
+                  style={{ minHeight: "300px" }}
+                >
+                  {isCameraLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+                      <FontAwesomeIcon
+                        icon={faSpinner}
+                        spin
+                        className="text-3xl text-white"
+                      />
+                    </div>
+                  )}
+
+                  <video
+                    ref={videoRef}
+                    className="w-full"
+                    style={{ display: isCameraLoading ? "none" : "block" }}
+                  />
+
+                  <canvas ref={canvasRef} className="hidden" />
+
+                  {/* Zone de scan */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute inset-0 border-2 border-indigo-500 m-8 rounded-lg opacity-50" />
+                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-indigo-500 animate-pulse" />
+                  </div>
+                </div>
+
+                <div className="flex justify-center space-x-4">
+                  <button
+                    onClick={switchCamera}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                    title="Changer de caméra"
+                  >
+                    <FontAwesomeIcon icon={faRotate} />
+                  </button>
+                  <button
+                    onClick={toggleTorch}
+                    className={`px-4 py-2 rounded-lg ${
+                      torchEnabled
+                        ? "bg-yellow-500 text-white hover:bg-yellow-600"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                    title="Torche"
+                  >
+                    <FontAwesomeIcon icon={faLightbulb} />
+                  </button>
+                </div>
+
+                <p className="text-xs text-gray-500 text-center">
+                  Placez le QR code dans le cadre pour le scanner
+                  automatiquement
+                </p>
+              </div>
+            ) : (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+                <FontAwesomeIcon
+                  icon={faCamera}
+                  className="text-3xl text-yellow-600 mb-2"
+                />
+                <p className="text-yellow-800">Caméra non disponible</p>
+                <p className="text-sm text-yellow-600 mt-1">
+                  Veuillez utiliser la saisie manuelle
+                </p>
+              </div>
+            )}
+
+            {/* Affichage du QR code scanné */}
+            {qrCode && (
+              <div
+                className={`p-3 rounded-lg ${qrValidated ? "bg-green-50 border border-green-200" : "bg-yellow-50 border border-yellow-200"}`}
+              >
+                <p className="text-sm text-gray-600">QR Code scanné :</p>
+                <p className="font-mono text-sm break-all">{qrCode}</p>
+                {qrValidated ? (
+                  <p className="text-green-600 text-sm mt-1">
+                    ✅ QR Code valide
+                  </p>
+                ) : (
+                  <p className="text-yellow-600 text-sm mt-1">
+                    ⚠️ QR Code non valide pour ce site
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Option de saisie manuelle */}
+            <details className="mt-4">
+              <summary className="text-sm text-gray-500 cursor-pointer">
+                Saisie manuelle du QR code
+              </summary>
+              <input
+                type="text"
+                value={qrCode}
+                onChange={(e) => setQrCode(e.target.value)}
+                placeholder="Ou entrez le code manuellement"
+                className="w-full px-4 py-2 border rounded-lg mt-2"
+              />
               <button
-                onClick={() => setCurrentStep("geoloc")}
-                className="px-4 py-2 bg-gray-100 rounded-lg"
+                onClick={validateQrCode}
+                className="mt-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                Valider le code saisi
+              </button>
+            </details>
+
+            {error && <p className="text-red-600 text-sm">{error}</p>}
+
+            <div className="flex justify-between pt-4">
+              <button
+                onClick={() => {
+                  stopCamera();
+                  setCurrentStep("geoloc");
+                }}
+                className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
                 <FontAwesomeIcon icon={faArrowLeft} className="mr-2" /> Retour
               </button>
-              <button
-                onClick={validateQrCode}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg"
-              >
-                Valider QR
-              </button>
               {qrValidated && (
                 <button
-                  onClick={() => setCurrentStep("pin")}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg"
+                  onClick={() => {
+                    stopCamera();
+                    setCurrentStep("pin");
+                  }}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
                   Continuer{" "}
                   <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
@@ -392,7 +651,9 @@ export default function ControllerVisitPage() {
               />
               Photo du site
             </h2>
-            {/* Interface de capture photo (similaire à l'agent) */}
+            <p className="text-gray-500 text-center py-8">
+              Capture photo à implémenter
+            </p>
             <div className="flex justify-between">
               <button
                 onClick={() => setCurrentStep("pin")}
@@ -509,7 +770,7 @@ export default function ControllerVisitPage() {
 
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
               <p>
-                <strong>Site :</strong> {roundSite?.name}
+                <strong>Site :</strong> {roundSite?.site?.name}
               </p>
               <p>
                 <strong>GPS :</strong>{" "}

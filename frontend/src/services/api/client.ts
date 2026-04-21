@@ -153,7 +153,7 @@ class ApiClient {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
 
       // ✅ Pour le test de connexion, NE PAS inclure le header ngrok
       const response = await fetch(`${testUrl}/ping`, {
