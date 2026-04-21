@@ -26,6 +26,7 @@ import {
   faExclamationTriangle,
   faPlay,
   faInfoCircle,
+  faBan,
 } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
 
@@ -48,6 +49,12 @@ export default function CreateRoundPage() {
   const [filteredSites, setFilteredSites] = useState<any[]>([]);
   const [creationMode, setCreationMode] = useState<CreationMode>("plan");
 
+  // ✅ État pour la limitation contrôleur
+  const [hasExistingRoundToday, setHasExistingRoundToday] = useState(false);
+  const [existingRound, setExistingRound] = useState<any>(null);
+  const [isController, setIsController] = useState(false);
+  const [canCreateRound, setCanCreateRound] = useState(true);
+
   const [formData, setFormData] = useState({
     name: "",
     scheduledStart: "",
@@ -57,11 +64,44 @@ export default function CreateRoundPage() {
 
   useEffect(() => {
     loadData();
+    checkExistingRounds();
   }, []);
 
   useEffect(() => {
     filterSites();
   }, [searchSite, availableSites, selectedSites]);
+
+  // ✅ Vérifier si l'utilisateur est un contrôleur simple (et non superviseur/admin)
+useEffect(() => {
+  if (user) {
+    // Le rôle est un string comme 'AGENT', 'CONTROLEUR', 'SUPERVISEUR', 'ADMIN', 'SUPERADMIN'
+    const userRole = user.role;
+    
+    // Un contrôleur simple a le rôle 'CONTROLEUR' uniquement
+    // Les superviseurs ont 'SUPERVISEUR', les admins ont 'ADMIN', etc.
+    const isSimpleController = userRole === 'CONTROLEUR';
+    
+    setIsController(isSimpleController);
+  }
+}, [user]);
+
+  const checkExistingRounds = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const existingRounds = await roundsService.list({ date: today });
+      
+      // Filtrer les rondes qui ne sont pas annulées
+      const activeRounds = existingRounds.filter(r => r.status !== 'CANCELLED');
+      
+      if (activeRounds.length > 0) {
+        setHasExistingRoundToday(true);
+        setExistingRound(activeRounds[0]);
+        setCanCreateRound(false);
+      }
+    } catch (error) {
+      console.error("Erreur vérification rondes existantes:", error);
+    }
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -167,6 +207,14 @@ export default function CreateRoundPage() {
     e.preventDefault();
 
     if (!validateForm()) return;
+    
+    // ✅ Vérification supplémentaire pour les contrôleurs
+    if (isController && !canCreateRound) {
+      setErrors({ 
+        submit: "Vous avez déjà une tournée aujourd'hui. Les contrôleurs sont limités à une tournée par jour." 
+      });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -194,7 +242,21 @@ export default function CreateRoundPage() {
 
         if (result) {
           if (mode === "start" && result.id) {
-            await roundsService.startAsController(result.id);
+            try {
+              await roundsService.startAsController(result.id);
+            } catch (startError: any) {
+              // ✅ Gestion de l'erreur de tournée non clôturée
+              if (startError?.response?.status === 403) {
+                const data = startError.response.data;
+                alert(data.error);
+                // Rediriger vers la tournée non clôturée
+                if (data.unclosedRoundId) {
+                  router.push(`/dashboard/controleur/rounds/${data.unclosedRoundId}`);
+                  return;
+                }
+              }
+              throw startError;
+            }
           }
           router.push("/dashboard/controleur/rounds");
         }
@@ -240,9 +302,24 @@ export default function CreateRoundPage() {
         alert(message);
         router.push("/dashboard/controleur/rounds");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur de création:", error);
-      setErrors({ submit: "Erreur lors de la création de la ronde" });
+      
+      // ✅ Gestion spécifique de l'erreur de limitation
+      if (error?.response?.status === 403) {
+        const data = error.response.data;
+        if (data.existingRoundId) {
+          setErrors({ 
+            submit: data.error 
+          });
+          setHasExistingRoundToday(true);
+          setExistingRound({ id: data.existingRoundId });
+        } else {
+          setErrors({ submit: data.error || "Erreur lors de la création de la ronde" });
+        }
+      } else {
+        setErrors({ submit: "Erreur lors de la création de la ronde" });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -279,6 +356,41 @@ export default function CreateRoundPage() {
           L'agent est automatiquement déduit du site sélectionné
         </p>
       </div>
+
+      {/* ✅ Alerte pour les contrôleurs qui ont déjà une tournée aujourd'hui */}
+      {isController && hasExistingRoundToday && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
+          <div className="flex items-start">
+            <FontAwesomeIcon
+              icon={faBan}
+              className="text-orange-600 mr-3 mt-1 text-xl"
+            />
+            <div className="flex-1">
+              <p className="font-medium text-orange-800 mb-2">
+                Vous avez déjà une tournée aujourd'hui
+              </p>
+              <p className="text-sm text-orange-700 mb-4">
+                Les contrôleurs sont limités à une seule tournée par jour. 
+                Vous pouvez continuer votre tournée existante.
+              </p>
+              <div className="flex space-x-3">
+                <Link
+                  href={`/dashboard/controleur/rounds/${existingRound?.id}`}
+                  className="inline-block px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                >
+                  Voir ma tournée du jour
+                </Link>
+                <Link
+                  href="/dashboard/controleur/rounds"
+                  className="inline-block px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                >
+                  Retour aux rondes
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Message d'avertissement pour les sites sans agent */}
       {sitesWithoutAgent.length > 0 && (
@@ -402,7 +514,7 @@ export default function CreateRoundPage() {
       </div>
 
       {/* Formulaire */}
-      <div className={`bg-white rounded-lg shadow p-6 ${availableSites.length === 0 ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`bg-white rounded-lg shadow p-6 ${(availableSites.length === 0 || (isController && !canCreateRound)) ? 'opacity-50 pointer-events-none' : ''}`}>
         <form
           onSubmit={(e) => handleSubmit(e, creationMode)}
           className="space-y-6"
@@ -422,6 +534,7 @@ export default function CreateRoundPage() {
               className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
                 errors.name ? "border-red-500" : "border-gray-300"
               }`}
+              disabled={isController && !canCreateRound}
             />
             {errors.name && (
               <p className="text-red-600 text-sm mt-1">{errors.name}</p>
@@ -443,6 +556,7 @@ export default function CreateRoundPage() {
               className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
                 errors.scheduledStart ? "border-red-500" : "border-gray-300"
               }`}
+              disabled={isController && !canCreateRound}
             />
             {errors.scheduledStart && (
               <p className="text-red-600 text-sm mt-1">
@@ -519,7 +633,7 @@ export default function CreateRoundPage() {
             <button
               type="button"
               onClick={() => setShowSiteSelector(true)}
-              disabled={availableSites.length === 0}
+              disabled={availableSites.length === 0 || (isController && !canCreateRound)}
               className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors flex items-center justify-center disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:text-gray-500"
             >
               <FontAwesomeIcon icon={faPlus} className="mr-2" />
@@ -534,6 +648,14 @@ export default function CreateRoundPage() {
           {errors.submit && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-red-800">{errors.submit}</p>
+              {hasExistingRoundToday && existingRound && (
+                <Link
+                  href={`/dashboard/controleur/rounds/${existingRound.id}`}
+                  className="mt-2 inline-block text-indigo-600 hover:underline text-sm"
+                >
+                  → Voir ma tournée existante
+                </Link>
+              )}
             </div>
           )}
 
@@ -547,7 +669,7 @@ export default function CreateRoundPage() {
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || availableSites.length === 0}
+              disabled={isSubmitting || availableSites.length === 0 || (isController && !canCreateRound)}
               className={`px-6 py-3 text-white rounded-lg disabled:opacity-50 flex items-center ${
                 creationMode === "start"
                   ? "bg-green-600 hover:bg-green-700"
