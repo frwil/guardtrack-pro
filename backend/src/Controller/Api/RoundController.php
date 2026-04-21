@@ -598,55 +598,6 @@ class RoundController extends AbstractController
     // MÉTHODES PRIVÉES
     // ============================================================
 
-    private function handleAgentPresence(RoundSite $roundSite, User $controller, array $data): void
-    {
-        $site = $roundSite->getSite();
-        $today = new \DateTimeImmutable('today');
-        $tomorrow = new \DateTimeImmutable('tomorrow');
-
-        $agentPresence = $this->presenceRepository->createQueryBuilder('p')
-            ->where('p.site = :site')
-            ->andWhere('p.checkIn >= :today')
-            ->andWhere('p.checkIn < :tomorrow')
-            ->setParameter('site', $site)
-            ->setParameter('today', $today)
-            ->setParameter('tomorrow', $tomorrow)
-            ->setMaxResults(1)
-            ->getQuery()
-            ->getOneOrNullResult();
-
-        $verdict = $data['agentPresenceStatus'] ?? null;
-
-        if ($agentPresence) {
-            $agentPresence->applyControllerVerdict(
-                $controller,
-                $verdict,
-                $data['absenceReason'] ?? null,
-                $data['comments'] ?? null
-            );
-            $agentPresence->setControllerPhotoAnalysis($data['photoAnalysis'] ?? null);
-            $agentPresence->setControllerDistanceFromSite($data['distanceFromSite'] ?? null);
-            $roundSite->addValidatedPresence($agentPresence);
-        } elseif ($verdict) {
-            $newPresence = new Presence();
-            $newPresence->setSite($site);
-            $newPresence->setCheckIn(new \DateTimeImmutable());
-            $newPresence->setStatus($verdict === Presence::VERDICT_PRESENT ? Presence::STATUS_VALIDATED : Presence::STATUS_REJECTED);
-            $newPresence->setController($controller);
-            $newPresence->setControllerVerdict($verdict);
-            $newPresence->setControllerValidationAt(new \DateTimeImmutable());
-            $newPresence->setControllerComment($data['comments'] ?? null);
-            $newPresence->setAbsenceReason($data['absenceReason'] ?? null);
-            $newPresence->setGpsLatitude($data['gpsLatitude'] ?? null);
-            $newPresence->setGpsLongitude($data['gpsLongitude'] ?? null);
-            $newPresence->setPhoto($data['photo'] ?? null);
-            $newPresence->setControllerPhotoAnalysis($data['photoAnalysis'] ?? null);
-            $newPresence->setControllerDistanceFromSite($data['distanceFromSite'] ?? null);
-            $this->entityManager->persist($newPresence);
-            $roundSite->addValidatedPresence($newPresence);
-        }
-    }
-
     private function formatRound(Round $round, bool $includeDetails = false): array
     {
         $data = [
@@ -711,5 +662,57 @@ class RoundController extends AbstractController
             'hasPhoto' => $roundSite->getPhoto() !== null,
             'isComplete' => $roundSite->isComplete(),
         ];
+    }
+
+    private function handleAgentPresence(RoundSite $roundSite, User $controller, array $data): void
+    {
+        $site = $roundSite->getSite();
+        $round = $roundSite->getRound(); // ✅ Ajouter cette ligne
+        $today = new \DateTimeImmutable('today');
+        $tomorrow = new \DateTimeImmutable('tomorrow');
+
+        $agentPresence = $this->presenceRepository->createQueryBuilder('p')
+            ->where('p.site = :site')
+            ->andWhere('p.checkIn >= :today')
+            ->andWhere('p.checkIn < :tomorrow')
+            ->setParameter('site', $site)
+            ->setParameter('today', $today)
+            ->setParameter('tomorrow', $tomorrow)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        $verdict = $data['agentPresenceStatus'] ?? null;
+
+        if ($agentPresence) {
+            $agentPresence->applyControllerVerdict(
+                $controller,
+                $verdict,
+                $data['absenceReason'] ?? null,
+                $data['comments'] ?? null
+            );
+            $agentPresence->setControllerPhotoAnalysis($data['photoAnalysis'] ?? null);
+            $agentPresence->setControllerDistanceFromSite($data['distanceFromSite'] ?? null);
+            $roundSite->addValidatedPresence($agentPresence);
+        } elseif ($verdict) {
+            $newPresence = new Presence();
+            $newPresence->setSite($site);
+            // ✅ AJOUTER L'AGENT
+            $newPresence->setAgent($round->getAgent());
+            $newPresence->setCheckIn(new \DateTimeImmutable());
+            $newPresence->setStatus($verdict === Presence::VERDICT_PRESENT ? Presence::STATUS_VALIDATED : Presence::STATUS_REJECTED);
+            $newPresence->setController($controller);
+            $newPresence->setControllerVerdict($verdict);
+            $newPresence->setControllerValidationAt(new \DateTimeImmutable());
+            $newPresence->setControllerComment($data['comments'] ?? null);
+            $newPresence->setAbsenceReason($data['absenceReason'] ?? null);
+            $newPresence->setGpsLatitude($data['gpsLatitude'] ?? null);
+            $newPresence->setGpsLongitude($data['gpsLongitude'] ?? null);
+            $newPresence->setPhoto($data['photo'] ?? null);
+            $newPresence->setControllerPhotoAnalysis($data['photoAnalysis'] ?? null);
+            $newPresence->setControllerDistanceFromSite($data['distanceFromSite'] ?? null);
+            $this->entityManager->persist($newPresence);
+            $roundSite->addValidatedPresence($newPresence);
+        }
     }
 }

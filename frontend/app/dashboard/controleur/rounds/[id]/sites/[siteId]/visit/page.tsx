@@ -479,6 +479,8 @@ export default function ControllerVisitPage() {
         distanceFromSite: geolocation?.distance ?? undefined,
       };
 
+      console.log("Données envoyées:", visitData);
+
       await roundsService.controllerVisitSite(roundId, siteId, visitData);
       router.push(`/dashboard/controleur/rounds/${roundId}`);
     } catch (error) {
@@ -549,16 +551,34 @@ export default function ControllerVisitPage() {
                 )}
               </button>
             ) : (
-              <div
-                className={`p-4 rounded-lg ${geolocation.withinGeofence ? "bg-green-50" : "bg-yellow-50"}`}
-              >
-                <p>Distance : {geolocation.distance?.toFixed(0)} m</p>
-                <p>
-                  {geolocation.withinGeofence
-                    ? "✅ Dans la zone"
-                    : "⚠️ Hors zone"}
-                </p>
-              </div>
+              <>
+                <div
+                  className={`p-4 rounded-lg ${geolocation.withinGeofence ? "bg-green-50" : "bg-yellow-50"}`}
+                >
+                  <p className="flex items-center">
+                    Distance : {geolocation.distance?.toFixed(0)} m
+                    {geolocation.distance > 50 && (
+                      <span className="ml-2 px-2 py-0.5 bg-orange-200 text-orange-800 text-xs rounded-full">
+                        ⚠️ Hors site
+                      </span>
+                    )}
+                  </p>
+                  <p>
+                    {geolocation.withinGeofence
+                      ? "✅ Dans la zone"
+                      : "⚠️ Hors zone"}
+                  </p>
+                </div>
+                
+                {geolocation.distance > 50 && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                    <p className="text-orange-800 text-sm flex items-center">
+                      <FontAwesomeIcon icon={faTriangleExclamation} className="mr-2" />
+                      Vous êtes à plus de 50m du site. La visite sera enregistrée comme "Hors site".
+                    </p>
+                  </div>
+                )}
+              </>
             )}
             <div className="flex justify-end">
               <button
@@ -1075,25 +1095,52 @@ export default function ControllerVisitPage() {
               Résumé de la visite
             </h2>
 
+            {geolocation && geolocation.distance > 50 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                <p className="text-orange-800 flex items-center text-sm">
+                  <FontAwesomeIcon icon={faTriangleExclamation} className="mr-2" />
+                  Vous êtes à plus de 50m du site. La visite sera marquée comme "Hors site".
+                </p>
+              </div>
+            )}
+
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
               <p>
                 <strong>Site :</strong> {roundSite?.site?.name}
               </p>
-              <p>
+              <p className="flex items-center">
                 <strong>GPS :</strong>{" "}
-                {geolocation
-                  ? `${geolocation.distance?.toFixed(0)}m`
-                  : "Non disponible"}
+                {geolocation ? (
+                  <span className="flex items-center ml-1">
+                    {geolocation.distance?.toFixed(0)}m
+                    {geolocation.distance > 50 ? (
+                      <span className="ml-2 px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full flex items-center">
+                        <FontAwesomeIcon icon={faTriangleExclamation} className="mr-1 text-xs" />
+                        Hors site (&gt;50m)
+                      </span>
+                    ) : (
+                      <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                        ✅ Dans la zone
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="ml-1 text-gray-500">Non disponible</span>
+                )}
               </p>
               <p>
                 <strong>QR Code :</strong>{" "}
-                {qrValidated ? "✅ Validé" : "❌ Non validé"}
+                {qrValidated ? (
+                  <span className="text-green-600">✅ Validé</span>
+                ) : (
+                  <span className="text-red-600">❌ Non validé</span>
+                )}
               </p>
               <p>
                 <strong>Photo :</strong>{" "}
                 {photo ? (
                   <span className="flex items-center">
-                    ✅ Capturée
+                    <span className="text-green-600">✅ Capturée</span>
                     {photoAnalysis && (
                       <span
                         className={`ml-2 text-xs ${photoAnalysis.meetsExpectations ? "text-green-600" : "text-yellow-600"}`}
@@ -1105,12 +1152,16 @@ export default function ControllerVisitPage() {
                     )}
                   </span>
                 ) : (
-                  "❌ Non capturée"
+                  <span className="text-red-600">❌ Non capturée</span>
                 )}
               </p>
               <p>
                 <strong>Statut agent :</strong>{" "}
-                {agentPresenceStatus === "PRESENT" ? "✅ Présent" : "❌ Absent"}
+                {agentPresenceStatus === "PRESENT" ? (
+                  <span className="text-green-600">✅ Présent</span>
+                ) : (
+                  <span className="text-red-600">❌ Absent</span>
+                )}
               </p>
               {agentPresenceStatus === "ABSENT" && (
                 <p>
