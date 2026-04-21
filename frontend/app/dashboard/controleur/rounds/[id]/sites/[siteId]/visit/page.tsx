@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { roundsService } from "../../../../../../../../src/services/api/rounds";
-import { imageAnalysisEnhancedService, EnhancedAnalysisResult } from "../../../../../../../../src/services/ai/imageAnalysisEnhanced";
-import { CameraCapture } from "../../../../../../../../src/components/CameraCapture";
+import {
+  imageAnalysisEnhancedService,
+  EnhancedAnalysisResult,
+} from "../../../../../../../../src/services/ai/imageAnalysisEnhanced";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faLocationDot,
@@ -55,10 +57,11 @@ export default function ControllerVisitPage() {
   const [qrCode, setQrCode] = useState("");
   const [qrValidated, setQrValidated] = useState(false);
   const [pinCode, setPinCode] = useState("");
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
-  const [photoAnalysis, setPhotoAnalysis] = useState<EnhancedAnalysisResult | null>(null);
+  const [photoAnalysis, setPhotoAnalysis] =
+    useState<EnhancedAnalysisResult | null>(null);
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
   const [agentPresenceStatus, setAgentPresenceStatus] = useState<
     "PRESENT" | "ABSENT" | null
   >(null);
@@ -254,7 +257,9 @@ export default function ControllerVisitPage() {
       }
     } catch (err) {
       setQrValidated(false);
-      setError("Format de QR code invalide. Assurez-vous de scanner le QR code affiché sur le site.");
+      setError(
+        "Format de QR code invalide. Assurez-vous de scanner le QR code affiché sur le site.",
+      );
     }
   };
 
@@ -287,35 +292,126 @@ export default function ControllerVisitPage() {
   };
 
   // ============================================================
-  // ÉTAPE 3 : CODE PIN
+  // ÉTAPE 3 : CODE PIN (avec vérification)
   // ============================================================
-  const validatePin = () => {
-    if (pinCode.length === 5) {
-      setCurrentStep("photo");
-    } else {
-      setError("Code PIN invalide");
+  const verifyPin = async () => {
+    if (pinCode.length !== 5) {
+      setError("Le code PIN doit contenir 5 chiffres");
+      return;
+    }
+
+    setIsVerifyingPin(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/verify-pin`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({ pin: pinCode }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (response.ok && data.valid) {
+        setCurrentStep("photo");
+      } else {
+        setError("Code PIN incorrect");
+        setPinCode("");
+      }
+    } catch (error) {
+      console.error("Erreur vérification PIN:", error);
+      setError("Erreur lors de la vérification du PIN");
+    } finally {
+      setIsVerifyingPin(false);
     }
   };
 
   // ============================================================
   // ÉTAPE 4 : PHOTO (avec analyse IA contextuelle)
   // ============================================================
-  const handlePhotoCapture = async (photoData: string) => {
-    setPhoto(photoData);
-    setShowCamera(false);
-    
-    // Analyse IA contextuelle pour le contrôleur
-    setIsAnalyzingPhoto(true);
+  const capturePhoto = async () => {
     try {
-      const analysis = await imageAnalysisEnhancedService.analyzeImage(photoData, {
-        context: 'controller_visit',
-        expectedPersonCount: 2,
-        checkUniform: true,
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
       });
+
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      await video.play();
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(video, 0, 0);
+
+      const photoData = canvas.toDataURL("image/jpeg", 0.8);
+      setPhoto(photoData);
+
+      stream.getTracks().forEach((track) => track.stop());
+
+      analyzePhoto(photoData);
+    } catch (error) {
+      console.error("Erreur caméra:", error);
+      setError("Impossible d'accéder à la caméra. Vérifiez les permissions.");
+    }
+  };
+
+  const simulatePhoto = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 400;
+    canvas.height = 400;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const gradient = ctx.createLinearGradient(0, 0, 400, 400);
+      gradient.addColorStop(0, "#4f46e5");
+      gradient.addColorStop(1, "#7c3aed");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 400, 400);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 24px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("📸 Contrôleur + Agent", 200, 180);
+      ctx.font = "16px Arial";
+      ctx.fillText("GuardTrack Pro - Photo test", 200, 230);
+      ctx.font = "14px Arial";
+      ctx.fillText(new Date().toLocaleString("fr-FR"), 200, 270);
+    }
+
+    const photoData = canvas.toDataURL("image/jpeg");
+    setPhoto(photoData);
+    analyzePhoto(photoData);
+  };
+
+  const analyzePhoto = async (photoData: string) => {
+    setIsAnalyzingPhoto(true);
+
+    try {
+      const analysis = await imageAnalysisEnhancedService.analyzeImage(
+        photoData,
+        {
+          context: "controller_visit",
+          expectedPersonCount: 2,
+          checkUniform: true,
+        },
+      );
       setPhotoAnalysis(analysis);
       setAiProvider(analysis.provider);
     } catch (error) {
-      console.error("Erreur analyse photo:", error);
+      console.error("Erreur analyse:", error);
     } finally {
       setIsAnalyzingPhoto(false);
     }
@@ -346,7 +442,7 @@ export default function ControllerVisitPage() {
   ];
 
   // ============================================================
-  // ÉTAPE 7 : SOUMISSION
+  // SOUMISSION
   // ============================================================
   const handleSubmit = async () => {
     setIsLoading(true);
@@ -396,16 +492,6 @@ export default function ControllerVisitPage() {
   // ============================================================
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Modal Camera */}
-      {showCamera && (
-        <CameraCapture
-          onCapture={handlePhotoCapture}
-          onCancel={() => setShowCamera(false)}
-          title="Photo de vérification"
-          description="Prenez une photo montrant l'agent en tenue"
-        />
-      )}
-
       {/* Barre de progression */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex items-center justify-between">
@@ -576,35 +662,76 @@ export default function ControllerVisitPage() {
               <FontAwesomeIcon icon={faKey} className="mr-2 text-indigo-600" />
               Code PIN contrôleur
             </h2>
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={5}
-              value={pinCode}
-              onChange={(e) =>
-                setPinCode(e.target.value.replace(/\D/g, "").slice(0, 5))
-              }
-              className="w-full text-center text-3xl tracking-widest px-4 py-3 border rounded-lg"
-              placeholder="•••••"
-            />
+
+            <p className="text-sm text-gray-600">
+              Entrez votre code PIN à 5 chiffres pour continuer
+            </p>
+
+            <div className="flex justify-center">
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={5}
+                value={pinCode}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "").slice(0, 5);
+                  setPinCode(value);
+                  setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (
+                    e.key === "Enter" &&
+                    pinCode.length === 5 &&
+                    !isVerifyingPin
+                  ) {
+                    verifyPin();
+                  }
+                }}
+                className="text-center text-4xl tracking-[0.5em] w-64 px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                placeholder="•••••"
+                autoFocus
+                disabled={isVerifyingPin}
+              />
+            </div>
+
             {error && (
-              <p className="text-red-600 text-sm flex items-center">
+              <p className="text-red-600 text-sm text-center flex items-center justify-center">
                 <FontAwesomeIcon icon={faCircleExclamation} className="mr-1" />
                 {error}
               </p>
             )}
-            <div className="flex justify-between">
+
+            <div className="flex justify-between pt-4">
               <button
-                onClick={() => setCurrentStep("qr")}
-                className="px-4 py-2 bg-gray-100 rounded-lg"
+                onClick={() => {
+                  setPinCode("");
+                  setError(null);
+                  setCurrentStep("qr");
+                }}
+                disabled={isVerifyingPin}
+                className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
               >
-                <FontAwesomeIcon icon={faArrowLeft} /> Retour
+                <FontAwesomeIcon icon={faArrowLeft} className="mr-2" />
+                Retour
               </button>
+
               <button
-                onClick={validatePin}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg"
+                onClick={verifyPin}
+                disabled={pinCode.length !== 5 || isVerifyingPin}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center"
               >
-                Continuer
+                {isVerifyingPin ? (
+                  <>
+                    <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
+                    Vérification...
+                  </>
+                ) : (
+                  <>
+                    Vérifier
+                    <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -630,20 +757,29 @@ export default function ControllerVisitPage() {
             {!photo ? (
               <div className="text-center py-8 space-y-4">
                 <button
-                  onClick={() => setShowCamera(true)}
+                  onClick={capturePhoto}
                   className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
                 >
                   <FontAwesomeIcon icon={faCamera} className="mr-3 text-2xl" />
                   Prendre une photo
                 </button>
                 <p className="text-sm text-gray-500 flex items-center justify-center">
-                  <FontAwesomeIcon icon={faShield} className="mr-1 text-gray-400" />
-                  La photo permet de vérifier la présence et la tenue de l'agent
+                  <FontAwesomeIcon
+                    icon={faShield}
+                    className="mr-1 text-gray-400"
+                  />
+                  La photo est obligatoire pour valider la visite
                 </p>
+
+                <button
+                  onClick={simulatePhoto}
+                  className="text-xs text-gray-400 underline mt-4"
+                >
+                  [Test] Simuler une photo
+                </button>
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Prévisualisation */}
                 <div className="relative">
                   <img
                     src={photo}
@@ -662,7 +798,6 @@ export default function ControllerVisitPage() {
                   </button>
                 </div>
 
-                {/* Provider IA */}
                 {aiProvider && !isAnalyzingPhoto && (
                   <div className="flex items-center justify-end">
                     <span className="text-xs text-gray-400 flex items-center">
@@ -672,10 +807,13 @@ export default function ControllerVisitPage() {
                   </div>
                 )}
 
-                {/* Analyse en cours */}
                 {isAnalyzingPhoto ? (
                   <div className="text-center py-6 bg-blue-50 rounded-lg">
-                    <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-indigo-600 mb-3" />
+                    <FontAwesomeIcon
+                      icon={faSpinner}
+                      spin
+                      className="text-3xl text-indigo-600 mb-3"
+                    />
                     <p className="text-gray-700 font-medium">
                       Analyse de la photo en cours...
                     </p>
@@ -684,7 +822,6 @@ export default function ControllerVisitPage() {
                     </p>
                   </div>
                 ) : photoAnalysis ? (
-                  /* Résultats de l'analyse */
                   <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5">
                     <div className="flex items-center justify-between mb-3">
                       <p className="font-medium text-blue-800 flex items-center">
@@ -693,70 +830,86 @@ export default function ControllerVisitPage() {
                       </p>
                       {photoAnalysis.meetsExpectations ? (
                         <span className="text-green-600 text-sm flex items-center">
-                          <FontAwesomeIcon icon={faCircleCheck} className="mr-1" />
+                          <FontAwesomeIcon
+                            icon={faCircleCheck}
+                            className="mr-1"
+                          />
                           Conforme
                         </span>
                       ) : (
                         <span className="text-yellow-600 text-sm flex items-center">
-                          <FontAwesomeIcon icon={faTriangleExclamation} className="mr-1" />
+                          <FontAwesomeIcon
+                            icon={faTriangleExclamation}
+                            className="mr-1"
+                          />
                           Vérifier
                         </span>
                       )}
                     </div>
 
                     <ul className="space-y-2 mb-4">
-                      {photoAnalysis.remarks.map((remark: string, i: number) => {
-                        const isPositive = remark.startsWith("✅");
-                        const isWarning = remark.startsWith("⚠️");
-                        return (
-                          <li
-                            key={i}
-                            className={`text-sm flex items-center ${
-                              isPositive
-                                ? "text-green-700"
-                                : isWarning
-                                  ? "text-orange-700"
-                                  : "text-blue-700"
-                            }`}
-                          >
-                            <FontAwesomeIcon
-                              icon={
+                      {photoAnalysis.remarks.map(
+                        (remark: string, i: number) => {
+                          const isPositive = remark.startsWith("✅");
+                          const isWarning = remark.startsWith("⚠️");
+                          return (
+                            <li
+                              key={i}
+                              className={`text-sm flex items-center ${
                                 isPositive
-                                  ? faCircleCheck
+                                  ? "text-green-700"
                                   : isWarning
-                                    ? faTriangleExclamation
-                                    : faCheck
-                              }
-                              className="mr-2 text-xs"
-                            />
-                            {remark}
-                          </li>
-                        );
-                      })}
+                                    ? "text-orange-700"
+                                    : "text-blue-700"
+                              }`}
+                            >
+                              <FontAwesomeIcon
+                                icon={
+                                  isPositive
+                                    ? faCircleCheck
+                                    : isWarning
+                                      ? faTriangleExclamation
+                                      : faCheck
+                                }
+                                className="mr-2 text-xs"
+                              />
+                              {remark}
+                            </li>
+                          );
+                        },
+                      )}
                     </ul>
 
                     <div className="grid grid-cols-4 gap-2 pt-3 border-t border-blue-200">
                       <div className="text-center">
                         <p className="text-xs text-gray-500">Personnes</p>
-                        <p className={`text-lg font-semibold ${photoAnalysis.personCount >= 2 ? "text-green-600" : "text-orange-600"}`}>
+                        <p
+                          className={`text-lg font-semibold ${photoAnalysis.personCount >= 2 ? "text-green-600" : "text-orange-600"}`}
+                        >
                           {photoAnalysis.personCount}/2
                         </p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-gray-500">Uniforme</p>
-                        <p className={`text-lg font-semibold ${photoAnalysis.hasUniform ? "text-green-600" : "text-red-600"}`}>
+                        <p
+                          className={`text-lg font-semibold ${photoAnalysis.hasUniform ? "text-green-600" : "text-red-600"}`}
+                        >
                           {photoAnalysis.hasUniform ? "Oui" : "Non"}
                         </p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-gray-500">Qualité</p>
-                        <p className={`text-lg font-semibold ${photoAnalysis.quality.isAcceptable ? "text-green-600" : "text-yellow-600"}`}>
+                        <p
+                          className={`text-lg font-semibold ${photoAnalysis.quality.isAcceptable ? "text-green-600" : "text-yellow-600"}`}
+                        >
                           {photoAnalysis.quality.isAcceptable ? "OK" : "⚠️"}
                         </p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-gray-500">Suspicion</p>
-                        <p className={`text-lg font-semibold ${photoAnalysis.suspicionScore > 50 ? "text-red-600" : "text-gray-800"}`}>
+                        <p
+                          className={`text-lg font-semibold ${photoAnalysis.suspicionScore > 50 ? "text-red-600" : "text-gray-800"}`}
+                        >
                           {photoAnalysis.suspicionScore}/100
                         </p>
                       </div>
@@ -772,40 +925,54 @@ export default function ControllerVisitPage() {
                 ) : (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                     <p className="text-yellow-800 flex items-center">
-                      <FontAwesomeIcon icon={faTriangleExclamation} className="mr-2" />
+                      <FontAwesomeIcon
+                        icon={faTriangleExclamation}
+                        className="mr-2"
+                      />
                       Analyse IA non disponible
                     </p>
                     <button
-                      onClick={() => handlePhotoCapture(photo)}
+                      onClick={() => analyzePhoto(photo)}
                       className="mt-2 text-sm text-indigo-600 hover:text-indigo-800 underline"
                     >
                       Réessayer l'analyse
                     </button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Vous pouvez continuer sans analyse, la visite sera
+                      enregistrée normalement.
+                    </p>
                   </div>
                 )}
 
+                <div className="flex justify-between pt-4">
+                  <button
+                    onClick={() => {
+                      setPhoto(null);
+                      setPhotoAnalysis(null);
+                    }}
+                    className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  >
+                    <FontAwesomeIcon icon={faCamera} className="mr-2" />
+                    Reprendre la photo
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentStep("presence")}
+                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center"
+                  >
+                    Continuer
+                    <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
+                  </button>
+                </div>
+
                 {!photoAnalysis && !isAnalyzingPhoto && (
                   <p className="text-xs text-gray-400 text-center">
-                    ⚠️ Sans analyse IA, la visite sera enregistrée mais pourra être vérifiée ultérieurement
+                    ℹ️ L'analyse IA est optionnelle. Vous pouvez continuer sans
+                    analyse.
                   </p>
                 )}
               </div>
             )}
-
-            <div className="flex justify-between pt-4">
-              <button
-                onClick={() => setCurrentStep("pin")}
-                className="px-4 py-2 bg-gray-100 rounded-lg"
-              >
-                <FontAwesomeIcon icon={faArrowLeft} /> Retour
-              </button>
-              <button
-                onClick={() => setCurrentStep("presence")}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg"
-              >
-                Continuer
-              </button>
-            </div>
           </div>
         )}
 
@@ -926,12 +1093,18 @@ export default function ControllerVisitPage() {
                   <span className="flex items-center">
                     ✅ Capturée
                     {photoAnalysis && (
-                      <span className={`ml-2 text-xs ${photoAnalysis.meetsExpectations ? 'text-green-600' : 'text-yellow-600'}`}>
-                        ({photoAnalysis.meetsExpectations ? 'Analyse OK' : 'À vérifier'})
+                      <span
+                        className={`ml-2 text-xs ${photoAnalysis.meetsExpectations ? "text-green-600" : "text-yellow-600"}`}
+                      >
+                        ({photoAnalysis.meetsExpectations
+                          ? "Analyse OK"
+                          : "À vérifier"})
                       </span>
                     )}
                   </span>
-                ) : "❌ Non capturée"}
+                ) : (
+                  "❌ Non capturée"
+                )}
               </p>
               <p>
                 <strong>Statut agent :</strong>{" "}
