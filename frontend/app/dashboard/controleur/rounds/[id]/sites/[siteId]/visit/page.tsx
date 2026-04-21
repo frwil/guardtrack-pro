@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { roundsService } from "../../../../../../../../src/services/api/rounds";
+import { imageAnalysisEnhancedService, EnhancedAnalysisResult } from "../../../../../../../../src/services/ai/imageAnalysisEnhanced";
+import { CameraCapture } from "../../../../../../../../src/components/CameraCapture";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faLocationDot,
@@ -17,6 +19,14 @@ import {
   faArrowLeft,
   faSpinner,
   faRotate,
+  faCheckCircle,
+  faTriangleExclamation,
+  faCircleExclamation,
+  faRobot,
+  faLightbulb,
+  faShield,
+  faCircleCheck,
+  faCheck,
 } from "@fortawesome/free-solid-svg-icons";
 import { Html5Qrcode } from "html5-qrcode";
 
@@ -46,12 +56,15 @@ export default function ControllerVisitPage() {
   const [qrValidated, setQrValidated] = useState(false);
   const [pinCode, setPinCode] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
-  const [photoAnalysis, setPhotoAnalysis] = useState<any>(null);
+  const [photoAnalysis, setPhotoAnalysis] = useState<EnhancedAnalysisResult | null>(null);
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
   const [agentPresenceStatus, setAgentPresenceStatus] = useState<
     "PRESENT" | "ABSENT" | null
   >(null);
   const [absenceReason, setAbsenceReason] = useState("");
   const [comments, setComments] = useState("");
+  const [aiProvider, setAiProvider] = useState<string>("lightweight");
 
   // Scanner QR code avec html5-qrcode
   const [hasCamera, setHasCamera] = useState(true);
@@ -63,6 +76,7 @@ export default function ControllerVisitPage() {
 
   useEffect(() => {
     loadRoundSite();
+    initializeAIService();
 
     return () => {
       stopScanner();
@@ -75,7 +89,6 @@ export default function ControllerVisitPage() {
       return;
     }
 
-    // Only runs when currentStep === "qr"
     const timer = setTimeout(() => {
       startScanner();
     }, 300);
@@ -85,6 +98,11 @@ export default function ControllerVisitPage() {
       stopScanner();
     };
   }, [currentStep]);
+
+  const initializeAIService = async () => {
+    await imageAnalysisEnhancedService.initialize();
+    setAiProvider(imageAnalysisEnhancedService.getCurrentProvider());
+  };
 
   const loadRoundSite = async () => {
     const round = await roundsService.getById(roundId);
@@ -155,7 +173,6 @@ export default function ControllerVisitPage() {
   // ÉTAPE 2 : SCAN QR CODE (html5-qrcode)
   // ============================================================
   const startScanner = async () => {
-    // Vérifier que l'élément existe
     const element = document.getElementById(scannerContainerId);
     if (!element) {
       console.warn("Élément scanner non trouvé, nouvelle tentative...");
@@ -171,7 +188,6 @@ export default function ControllerVisitPage() {
 
       if (devices && devices.length > 0) {
         setCameras(devices);
-        // Préférer la caméra arrière
         const backCamera = devices.find(
           (d) =>
             d.label.toLowerCase().includes("back") ||
@@ -221,29 +237,22 @@ export default function ControllerVisitPage() {
     setQrCode(decodedText);
 
     try {
-      // Parser le JSON
       const qrData = JSON.parse(decodedText);
 
-      // Vérifier que le siteId correspond
       if (qrData.siteId === siteId) {
         setQrValidated(true);
         setError(null);
 
-        // Arrêter le scanner
         stopScanner();
 
-        // Passer automatiquement à l'étape suivante après un court délai
         setTimeout(() => {
           setCurrentStep("pin");
         }, 800);
       } else {
         setQrValidated(false);
-        setError(
-          `QR code incorrect`,
-        );
+        setError(`QR code incorrect`);
       }
     } catch (err) {
-      // Si ce n'est pas du JSON valide
       setQrValidated(false);
       setError("Format de QR code invalide. Assurez-vous de scanner le QR code affiché sur le site.");
     }
@@ -251,7 +260,6 @@ export default function ControllerVisitPage() {
 
   const onScanFailure = (error: string) => {
     // Ignorer les erreurs silencieusement pendant le scan
-    // console.warn('Scan error:', error);
   };
 
   const switchCamera = async () => {
@@ -264,7 +272,6 @@ export default function ControllerVisitPage() {
     await stopScanner();
     setCurrentCamera(nextCamera);
 
-    // Redémarrer avec la nouvelle caméra
     setTimeout(() => {
       if (scannerRef.current) {
         scannerRef.current
@@ -291,8 +298,29 @@ export default function ControllerVisitPage() {
   };
 
   // ============================================================
-  // ÉTAPE 4 : PHOTO
+  // ÉTAPE 4 : PHOTO (avec analyse IA contextuelle)
   // ============================================================
+  const handlePhotoCapture = async (photoData: string) => {
+    setPhoto(photoData);
+    setShowCamera(false);
+    
+    // Analyse IA contextuelle pour le contrôleur
+    setIsAnalyzingPhoto(true);
+    try {
+      const analysis = await imageAnalysisEnhancedService.analyzeImage(photoData, {
+        context: 'controller_visit',
+        expectedPersonCount: 2,
+        checkUniform: true,
+      });
+      setPhotoAnalysis(analysis);
+      setAiProvider(analysis.provider);
+    } catch (error) {
+      console.error("Erreur analyse photo:", error);
+    } finally {
+      setIsAnalyzingPhoto(false);
+    }
+  };
+
   const presenceOptions = [
     {
       value: "PRESENT",
@@ -368,6 +396,16 @@ export default function ControllerVisitPage() {
   // ============================================================
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      {/* Modal Camera */}
+      {showCamera && (
+        <CameraCapture
+          onCapture={handlePhotoCapture}
+          onCancel={() => setShowCamera(false)}
+          title="Photo de vérification"
+          description="Prenez une photo montrant l'agent en tenue"
+        />
+      )}
+
       {/* Barre de progression */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex items-center justify-between">
@@ -460,7 +498,6 @@ export default function ControllerVisitPage() {
               Scannez le QR code affiché sur le site
             </p>
 
-            {/* Scanner de QR code */}
             {hasCamera ? (
               <div className="space-y-3">
                 <div
@@ -501,12 +538,10 @@ export default function ControllerVisitPage() {
               </div>
             )}
 
-            {/* Affichage du QR code scanné */}
             {qrCode && (
               <div
                 className={`p-3 rounded-lg ${qrValidated ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}
               >
-                
                 {qrValidated ? (
                   <p className="text-green-600 text-sm mt-1">
                     ✅ QR Code valide - Redirection...
@@ -531,7 +566,6 @@ export default function ControllerVisitPage() {
               >
                 <FontAwesomeIcon icon={faArrowLeft} className="mr-2" /> Retour
               </button>
-              {/* Le bouton Continuer n'est plus nécessaire car la validation est automatique */}
             </div>
           </div>
         )}
@@ -553,6 +587,12 @@ export default function ControllerVisitPage() {
               className="w-full text-center text-3xl tracking-widest px-4 py-3 border rounded-lg"
               placeholder="•••••"
             />
+            {error && (
+              <p className="text-red-600 text-sm flex items-center">
+                <FontAwesomeIcon icon={faCircleExclamation} className="mr-1" />
+                {error}
+              </p>
+            )}
             <div className="flex justify-between">
               <button
                 onClick={() => setCurrentStep("qr")}
@@ -577,12 +617,182 @@ export default function ControllerVisitPage() {
                 icon={faCamera}
                 className="mr-2 text-indigo-600"
               />
-              Photo du site
+              Photo de vérification
             </h2>
-            <p className="text-gray-500 text-center py-8">
-              Capture photo à implémenter
-            </p>
-            <div className="flex justify-between">
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-blue-800 flex items-center">
+                <FontAwesomeIcon icon={faLightbulb} className="mr-2" />
+                Prenez une photo montrant l'agent en tenue de travail
+              </p>
+            </div>
+
+            {!photo ? (
+              <div className="text-center py-8 space-y-4">
+                <button
+                  onClick={() => setShowCamera(true)}
+                  className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
+                >
+                  <FontAwesomeIcon icon={faCamera} className="mr-3 text-2xl" />
+                  Prendre une photo
+                </button>
+                <p className="text-sm text-gray-500 flex items-center justify-center">
+                  <FontAwesomeIcon icon={faShield} className="mr-1 text-gray-400" />
+                  La photo permet de vérifier la présence et la tenue de l'agent
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Prévisualisation */}
+                <div className="relative">
+                  <img
+                    src={photo}
+                    alt="Capture"
+                    className="w-full max-w-md mx-auto rounded-lg shadow-md"
+                  />
+                  <button
+                    onClick={() => {
+                      setPhoto(null);
+                      setPhotoAnalysis(null);
+                    }}
+                    className="absolute top-2 right-2 bg-white rounded-full p-2 shadow-md hover:bg-gray-100"
+                    title="Reprendre la photo"
+                  >
+                    <FontAwesomeIcon icon={faRotate} />
+                  </button>
+                </div>
+
+                {/* Provider IA */}
+                {aiProvider && !isAnalyzingPhoto && (
+                  <div className="flex items-center justify-end">
+                    <span className="text-xs text-gray-400 flex items-center">
+                      <FontAwesomeIcon icon={faRobot} className="mr-1" />
+                      IA : {aiProvider}
+                    </span>
+                  </div>
+                )}
+
+                {/* Analyse en cours */}
+                {isAnalyzingPhoto ? (
+                  <div className="text-center py-6 bg-blue-50 rounded-lg">
+                    <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-indigo-600 mb-3" />
+                    <p className="text-gray-700 font-medium">
+                      Analyse de la photo en cours...
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Détection de l'agent, de l'uniforme, qualité d'image...
+                    </p>
+                  </div>
+                ) : photoAnalysis ? (
+                  /* Résultats de l'analyse */
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-medium text-blue-800 flex items-center">
+                        <FontAwesomeIcon icon={faRobot} className="mr-2" />
+                        Analyse IA - Contrôle
+                      </p>
+                      {photoAnalysis.meetsExpectations ? (
+                        <span className="text-green-600 text-sm flex items-center">
+                          <FontAwesomeIcon icon={faCircleCheck} className="mr-1" />
+                          Conforme
+                        </span>
+                      ) : (
+                        <span className="text-yellow-600 text-sm flex items-center">
+                          <FontAwesomeIcon icon={faTriangleExclamation} className="mr-1" />
+                          Vérifier
+                        </span>
+                      )}
+                    </div>
+
+                    <ul className="space-y-2 mb-4">
+                      {photoAnalysis.remarks.map((remark: string, i: number) => {
+                        const isPositive = remark.startsWith("✅");
+                        const isWarning = remark.startsWith("⚠️");
+                        return (
+                          <li
+                            key={i}
+                            className={`text-sm flex items-center ${
+                              isPositive
+                                ? "text-green-700"
+                                : isWarning
+                                  ? "text-orange-700"
+                                  : "text-blue-700"
+                            }`}
+                          >
+                            <FontAwesomeIcon
+                              icon={
+                                isPositive
+                                  ? faCircleCheck
+                                  : isWarning
+                                    ? faTriangleExclamation
+                                    : faCheck
+                              }
+                              className="mr-2 text-xs"
+                            />
+                            {remark}
+                          </li>
+                        );
+                      })}
+                    </ul>
+
+                    <div className="grid grid-cols-4 gap-2 pt-3 border-t border-blue-200">
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Personnes</p>
+                        <p className={`text-lg font-semibold ${photoAnalysis.personCount >= 2 ? "text-green-600" : "text-orange-600"}`}>
+                          {photoAnalysis.personCount}/2
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Uniforme</p>
+                        <p className={`text-lg font-semibold ${photoAnalysis.hasUniform ? "text-green-600" : "text-red-600"}`}>
+                          {photoAnalysis.hasUniform ? "Oui" : "Non"}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Qualité</p>
+                        <p className={`text-lg font-semibold ${photoAnalysis.quality.isAcceptable ? "text-green-600" : "text-yellow-600"}`}>
+                          {photoAnalysis.quality.isAcceptable ? "OK" : "⚠️"}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Suspicion</p>
+                        <p className={`text-lg font-semibold ${photoAnalysis.suspicionScore > 50 ? "text-red-600" : "text-gray-800"}`}>
+                          {photoAnalysis.suspicionScore}/100
+                        </p>
+                      </div>
+                    </div>
+
+                    {!photoAnalysis.meetsExpectations && (
+                      <div className="mt-3 p-2 bg-yellow-50 rounded text-xs text-yellow-700">
+                        <FontAwesomeIcon icon={faLightbulb} className="mr-1" />
+                        {photoAnalysis.expectationDetails.join(" • ")}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-yellow-800 flex items-center">
+                      <FontAwesomeIcon icon={faTriangleExclamation} className="mr-2" />
+                      Analyse IA non disponible
+                    </p>
+                    <button
+                      onClick={() => handlePhotoCapture(photo)}
+                      className="mt-2 text-sm text-indigo-600 hover:text-indigo-800 underline"
+                    >
+                      Réessayer l'analyse
+                    </button>
+                  </div>
+                )}
+
+                {!photoAnalysis && !isAnalyzingPhoto && (
+                  <p className="text-xs text-gray-400 text-center">
+                    ⚠️ Sans analyse IA, la visite sera enregistrée mais pourra être vérifiée ultérieurement
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-between pt-4">
               <button
                 onClick={() => setCurrentStep("pin")}
                 className="px-4 py-2 bg-gray-100 rounded-lg"
@@ -712,7 +922,16 @@ export default function ControllerVisitPage() {
               </p>
               <p>
                 <strong>Photo :</strong>{" "}
-                {photo ? "✅ Capturée" : "❌ Non capturée"}
+                {photo ? (
+                  <span className="flex items-center">
+                    ✅ Capturée
+                    {photoAnalysis && (
+                      <span className={`ml-2 text-xs ${photoAnalysis.meetsExpectations ? 'text-green-600' : 'text-yellow-600'}`}>
+                        ({photoAnalysis.meetsExpectations ? 'Analyse OK' : 'À vérifier'})
+                      </span>
+                    )}
+                  </span>
+                ) : "❌ Non capturée"}
               </p>
               <p>
                 <strong>Statut agent :</strong>{" "}
