@@ -7,6 +7,7 @@ import {
   imageAnalysisEnhancedService,
   EnhancedAnalysisResult,
 } from "../../../../../../../../src/services/ai/imageAnalysisEnhanced";
+import { settingsService, AppSettings } from "../../../../../../../../src/services/api/settings";
 import { useAuthStore } from "../../../../../../../../src/stores/authStore";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -56,6 +57,9 @@ export default function ControllerVisitPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Paramètres de l'application
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+
   // Données du formulaire
   const [geolocation, setGeolocation] = useState<any>(null);
   const [qrCode, setQrCode] = useState("");
@@ -81,9 +85,14 @@ export default function ControllerVisitPage() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = "qr-reader";
 
+  // Rayon de géorepérage (depuis les settings ou défaut)
+  const geofencingRadius = appSettings?.security?.geofencingRadius || 100;
+  const offSiteThreshold = 50; // Seuil "Hors site" en mètres
+
   useEffect(() => {
     loadRoundSite();
     initializeAIService();
+    loadSettings();
 
     return () => {
       stopScanner();
@@ -106,6 +115,15 @@ export default function ControllerVisitPage() {
     };
   }, [currentStep]);
 
+  const loadSettings = async () => {
+    try {
+      const settings = await settingsService.getSettings();
+      setAppSettings(settings);
+    } catch (error) {
+      console.error("Erreur chargement paramètres:", error);
+    }
+  };
+
   const initializeAIService = async () => {
     await imageAnalysisEnhancedService.initialize();
     setAiProvider(imageAnalysisEnhancedService.getCurrentProvider());
@@ -118,6 +136,54 @@ export default function ControllerVisitPage() {
       setRoundSite(site);
     } catch (error) {
       console.error("Erreur chargement ronde:", error);
+    }
+  };
+
+  // Vérifier si une étape est obligatoire selon les settings
+  const isStepRequired = (step: Step): boolean => {
+    if (!appSettings) return true;
+    
+    switch (step) {
+      case "photo":
+        return appSettings.security.requirePhoto;
+      case "pin":
+        return appSettings.security.requirePin;
+      case "geoloc":
+        return appSettings.security.requireGeolocation;
+      default:
+        return true;
+    }
+  };
+
+  // Obtenir les étapes actives (en fonction des settings)
+  const getActiveSteps = (): Step[] => {
+    const allSteps: Step[] = ["geoloc", "qr", "pin", "photo", "presence", "comments", "summary"];
+    
+    return allSteps.filter(step => {
+      if (step === "geoloc" && !isStepRequired("geoloc")) return false;
+      if (step === "pin" && !isStepRequired("pin")) return false;
+      if (step === "photo" && !isStepRequired("photo")) return false;
+      return true;
+    });
+  };
+
+  // Passer à l'étape suivante en tenant compte des étapes désactivées
+  const goToNextStep = () => {
+    const activeSteps = getActiveSteps();
+    const currentIndex = activeSteps.indexOf(currentStep);
+    
+    if (currentIndex < activeSteps.length - 1) {
+      setCurrentStep(activeSteps[currentIndex + 1]);
+    }
+  };
+
+  // Revenir à l'étape précédente
+  const goToPreviousStep = () => {
+    const activeSteps = getActiveSteps();
+    const currentIndex = activeSteps.indexOf(currentStep);
+    
+    if (currentIndex > 0) {
+      setCurrentStep(activeSteps[currentIndex - 1]);
     }
   };
 
@@ -148,8 +214,7 @@ export default function ControllerVisitPage() {
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
           distance,
-          withinGeofence:
-            distance <= (roundSite?.site?.geofencingRadius || 100),
+          withinGeofence: distance <= geofencingRadius,
         });
         setIsLoading(false);
       },
@@ -257,7 +322,7 @@ export default function ControllerVisitPage() {
         stopScanner();
 
         setTimeout(() => {
-          setCurrentStep("pin");
+          goToNextStep();
         }, 800);
       } else {
         setQrValidated(false);
@@ -320,7 +385,7 @@ export default function ControllerVisitPage() {
       const success = await loginWithPin(user.email, pinCode);
 
       if (success) {
-        setCurrentStep("photo");
+        goToNextStep();
       } else {
         setError(authError || "Code PIN incorrect");
         setPinCode("");
@@ -467,8 +532,8 @@ export default function ControllerVisitPage() {
         gpsLatitude: geolocation?.latitude ?? undefined,
         gpsLongitude: geolocation?.longitude ?? undefined,
         qrCodeScanned: qrValidated,
-        pinEntered: true,
-        photo: photo ?? undefined,
+        pinEntered: isStepRequired("pin") ? true : (pinCode.length === 5),
+        photo: isStepRequired("photo") ? (photo ?? undefined) : undefined,
         photoAnalysis: photoAnalysis ?? undefined,
         agentPresenceStatus: agentPresenceStatus,
         absenceReason:
@@ -494,23 +559,35 @@ export default function ControllerVisitPage() {
   // ============================================================
   // RENDU
   // ============================================================
+  
+  // Labels pour la barre de progression (filtrés selon settings)
+  const getStepLabels = () => {
+    const labels: { label: string; step: Step }[] = [];
+    
+    if (isStepRequired("geoloc")) labels.push({ label: "GPS", step: "geoloc" });
+    labels.push({ label: "QR", step: "qr" });
+    if (isStepRequired("pin")) labels.push({ label: "PIN", step: "pin" });
+    if (isStepRequired("photo")) labels.push({ label: "📸", step: "photo" });
+    labels.push({ label: "👤", step: "presence" });
+    labels.push({ label: "💬", step: "comments" });
+    labels.push({ label: "✅", step: "summary" });
+    
+    return labels;
+  };
+
+  const stepLabels = getStepLabels();
+  const activeSteps = getActiveSteps();
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Barre de progression */}
+      {/* Barre de progression dynamique */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex items-center justify-between">
-          {["GPS", "QR", "PIN", "📸", "👤", "💬", "✅"].map((label, i) => {
-            const steps: Step[] = [
-              "geoloc",
-              "qr",
-              "pin",
-              "photo",
-              "presence",
-              "comments",
-              "summary",
-            ];
-            const isCompleted = i < steps.indexOf(currentStep);
-            const isCurrent = steps[i] === currentStep;
+          {stepLabels.map((item, i) => {
+            const currentIndex = activeSteps.indexOf(currentStep);
+            const itemIndex = activeSteps.indexOf(item.step);
+            const isCompleted = itemIndex < currentIndex;
+            const isCurrent = item.step === currentStep;
 
             return (
               <div key={i} className="flex flex-col items-center">
@@ -519,13 +596,23 @@ export default function ControllerVisitPage() {
                   ${isCurrent ? "bg-indigo-600 text-white" : isCompleted ? "bg-green-500 text-white" : "bg-gray-200"}
                 `}
                 >
-                  {label}
+                  {item.label}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Indicateur du provider IA */}
+      {appSettings?.ai?.provider && currentStep === "photo" && (
+        <div className="bg-white rounded-lg shadow p-3">
+          <p className="text-xs text-gray-500 flex items-center justify-end">
+            <FontAwesomeIcon icon={faRobot} className="mr-1" />
+            IA active : {appSettings.ai.provider.toUpperCase()}
+          </p>
+        </div>
+      )}
 
       {/* Contenu de l'étape */}
       <div className="bg-white rounded-lg shadow p-6">
@@ -537,19 +624,36 @@ export default function ControllerVisitPage() {
                 className="mr-2 text-indigo-600"
               />
               Géolocalisation
+              {!isStepRequired("geoloc") && (
+                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                  Optionnel
+                </span>
+              )}
             </h2>
+            
             {!geolocation ? (
-              <button
-                onClick={getGeolocation}
-                disabled={isLoading}
-                className="w-full py-3 bg-indigo-600 text-white rounded-lg"
-              >
-                {isLoading ? (
-                  <FontAwesomeIcon icon={faSpinner} spin />
-                ) : (
-                  "Obtenir ma position"
+              <>
+                <button
+                  onClick={getGeolocation}
+                  disabled={isLoading}
+                  className="w-full py-3 bg-indigo-600 text-white rounded-lg"
+                >
+                  {isLoading ? (
+                    <FontAwesomeIcon icon={faSpinner} spin />
+                  ) : (
+                    "Obtenir ma position"
+                  )}
+                </button>
+                
+                {!isStepRequired("geoloc") && (
+                  <button
+                    onClick={goToNextStep}
+                    className="w-full py-2 text-gray-500 underline text-sm"
+                  >
+                    Passer cette étape
+                  </button>
                 )}
-              </button>
+              </>
             ) : (
               <>
                 <div
@@ -557,7 +661,7 @@ export default function ControllerVisitPage() {
                 >
                   <p className="flex items-center">
                     Distance : {geolocation.distance?.toFixed(0)} m
-                    {geolocation.distance > 50 && (
+                    {geolocation.distance > offSiteThreshold && (
                       <span className="ml-2 px-2 py-0.5 bg-orange-200 text-orange-800 text-xs rounded-full">
                         ⚠️ Hors site
                       </span>
@@ -568,27 +672,31 @@ export default function ControllerVisitPage() {
                       ? "✅ Dans la zone"
                       : "⚠️ Hors zone"}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Rayon configuré : {geofencingRadius}m
+                  </p>
                 </div>
                 
-                {geolocation.distance > 50 && (
+                {geolocation.distance > offSiteThreshold && (
                   <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                     <p className="text-orange-800 text-sm flex items-center">
                       <FontAwesomeIcon icon={faTriangleExclamation} className="mr-2" />
-                      Vous êtes à plus de 50m du site. La visite sera enregistrée comme "Hors site".
+                      Vous êtes à plus de {offSiteThreshold}m du site. La visite sera marquée comme "Hors site".
                     </p>
                   </div>
                 )}
+                
+                <div className="flex justify-end">
+                  <button
+                    onClick={goToNextStep}
+                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg"
+                  >
+                    Continuer{" "}
+                    <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
+                  </button>
+                </div>
               </>
             )}
-            <div className="flex justify-end">
-              <button
-                onClick={() => setCurrentStep("qr")}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg"
-              >
-                Continuer{" "}
-                <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
-              </button>
-            </div>
           </div>
         )}
 
@@ -668,7 +776,7 @@ export default function ControllerVisitPage() {
               <button
                 onClick={() => {
                   stopScanner();
-                  setCurrentStep("geoloc");
+                  goToPreviousStep();
                 }}
                 className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
@@ -683,6 +791,11 @@ export default function ControllerVisitPage() {
             <h2 className="text-xl font-semibold flex items-center">
               <FontAwesomeIcon icon={faKey} className="mr-2 text-indigo-600" />
               Code PIN contrôleur
+              {!isStepRequired("pin") && (
+                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                  Optionnel
+                </span>
+              )}
             </h2>
 
             <p className="text-sm text-gray-600">
@@ -729,7 +842,7 @@ export default function ControllerVisitPage() {
                 onClick={() => {
                   setPinCode("");
                   setError(null);
-                  setCurrentStep("qr");
+                  goToPreviousStep();
                 }}
                 disabled={isVerifyingPin}
                 className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
@@ -737,6 +850,15 @@ export default function ControllerVisitPage() {
                 <FontAwesomeIcon icon={faArrowLeft} className="mr-2" />
                 Retour
               </button>
+
+              {!isStepRequired("pin") && (
+                <button
+                  onClick={goToNextStep}
+                  className="px-4 py-2 text-gray-500 underline text-sm"
+                >
+                  Passer cette étape
+                </button>
+              )}
 
               <button
                 onClick={verifyPin}
@@ -767,6 +889,11 @@ export default function ControllerVisitPage() {
                 className="mr-2 text-indigo-600"
               />
               Photo de vérification
+              {!isStepRequired("photo") && (
+                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                  Optionnel
+                </span>
+              )}
             </h2>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -790,7 +917,9 @@ export default function ControllerVisitPage() {
                     icon={faShield}
                     className="mr-1 text-gray-400"
                   />
-                  La photo est obligatoire pour valider la visite
+                  {isStepRequired("photo") 
+                    ? "La photo est obligatoire pour valider la visite"
+                    : "La photo est optionnelle mais recommandée"}
                 </p>
 
                 <button
@@ -799,6 +928,15 @@ export default function ControllerVisitPage() {
                 >
                   [Test] Simuler une photo
                 </button>
+
+                {!isStepRequired("photo") && (
+                  <button
+                    onClick={goToNextStep}
+                    className="w-full py-2 text-gray-500 underline text-sm"
+                  >
+                    Passer cette étape
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -979,7 +1117,7 @@ export default function ControllerVisitPage() {
                   </button>
 
                   <button
-                    onClick={() => setCurrentStep("presence")}
+                    onClick={goToNextStep}
                     className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center"
                   >
                     Continuer
@@ -995,6 +1133,15 @@ export default function ControllerVisitPage() {
                 )}
               </div>
             )}
+            
+            <div className="flex justify-start pt-2">
+              <button
+                onClick={goToPreviousStep}
+                className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                <FontAwesomeIcon icon={faArrowLeft} className="mr-2" /> Retour
+              </button>
+            </div>
           </div>
         )}
 
@@ -1036,13 +1183,13 @@ export default function ControllerVisitPage() {
 
             <div className="flex justify-between">
               <button
-                onClick={() => setCurrentStep("photo")}
+                onClick={goToPreviousStep}
                 className="px-4 py-2 bg-gray-100 rounded-lg"
               >
                 <FontAwesomeIcon icon={faArrowLeft} /> Retour
               </button>
               <button
-                onClick={() => setCurrentStep("comments")}
+                onClick={goToNextStep}
                 disabled={
                   !agentPresenceStatus ||
                   (agentPresenceStatus === "ABSENT" && !absenceReason)
@@ -1070,13 +1217,13 @@ export default function ControllerVisitPage() {
             />
             <div className="flex justify-between">
               <button
-                onClick={() => setCurrentStep("presence")}
+                onClick={goToPreviousStep}
                 className="px-4 py-2 bg-gray-100 rounded-lg"
               >
                 <FontAwesomeIcon icon={faArrowLeft} /> Retour
               </button>
               <button
-                onClick={() => setCurrentStep("summary")}
+                onClick={goToNextStep}
                 className="px-6 py-2 bg-indigo-600 text-white rounded-lg"
               >
                 Continuer
@@ -1095,11 +1242,11 @@ export default function ControllerVisitPage() {
               Résumé de la visite
             </h2>
 
-            {geolocation && geolocation.distance > 50 && (
+            {geolocation && geolocation.distance > offSiteThreshold && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                 <p className="text-orange-800 flex items-center text-sm">
                   <FontAwesomeIcon icon={faTriangleExclamation} className="mr-2" />
-                  Vous êtes à plus de 50m du site. La visite sera marquée comme "Hors site".
+                  Vous êtes à plus de {offSiteThreshold}m du site. La visite sera marquée comme "Hors site".
                 </p>
               </div>
             )}
@@ -1113,10 +1260,10 @@ export default function ControllerVisitPage() {
                 {geolocation ? (
                   <span className="flex items-center ml-1">
                     {geolocation.distance?.toFixed(0)}m
-                    {geolocation.distance > 50 ? (
+                    {geolocation.distance > offSiteThreshold ? (
                       <span className="ml-2 px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full flex items-center">
                         <FontAwesomeIcon icon={faTriangleExclamation} className="mr-1 text-xs" />
-                        Hors site (&gt;50m)
+                        Hors site (&gt;{offSiteThreshold}m)
                       </span>
                     ) : (
                       <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
@@ -1152,7 +1299,9 @@ export default function ControllerVisitPage() {
                     )}
                   </span>
                 ) : (
-                  <span className="text-red-600">❌ Non capturée</span>
+                  <span className="text-gray-500">
+                    {isStepRequired("photo") ? "❌ Non capturée" : "⏭️ Non fournie (optionnel)"}
+                  </span>
                 )}
               </p>
               <p>
@@ -1179,7 +1328,7 @@ export default function ControllerVisitPage() {
 
             <div className="flex justify-between">
               <button
-                onClick={() => setCurrentStep("comments")}
+                onClick={goToPreviousStep}
                 className="px-4 py-2 bg-gray-100 rounded-lg"
               >
                 <FontAwesomeIcon icon={faArrowLeft} /> Retour
