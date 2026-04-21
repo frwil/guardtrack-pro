@@ -1,223 +1,346 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { roundsService, Round } from '../../../../src/services/api/rounds';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "../../../../src/stores/authStore";
+import { roundsService } from "../../../../src/services/api/rounds";
+import { sitesService } from "../../../../src/services/api/sites";
+import { assignmentsService } from "../../../../src/services/api/assignments";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+
+import { serverTime } from "../../../../src/services/time/serverTime";
+import { offlineDB } from "../../../../src/services/storage/db";
+import { networkMonitor } from "../../../../src/services/network/monitor";
 import {
+  faArrowLeft,
+  faSave,
+  faSpinner,
   faPlus,
-  faPlay,
-  faEye,
-  faCheckCircle,
-  faClock,
+  faTrash,
   faMapPin,
   faUser,
-  faSpinner,
-  faChevronRight,
+  faCalendar,
+  faChevronUp,
+  faChevronDown,
+  faSearch,
   faExclamationTriangle,
-  faRotate,
-} from '@fortawesome/free-solid-svg-icons';
-import Link from 'next/link';
+  faPlay,
+  faInfoCircle,
+  faBan,
+} from "@fortawesome/free-solid-svg-icons";
+import Link from "next/link";
 
-export default function ControleurRoundsPage() {
+type CreationMode = "plan" | "start";
+
+export default function CreateRoundPage() {
   const router = useRouter();
-  const [plannedRounds, setPlannedRounds] = useState<Round[]>([]);
-  const [inProgressRounds, setInProgressRounds] = useState<Round[]>([]);
-  const [pendingValidation, setPendingValidation] = useState<Round[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isStarting, setIsStarting] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'planned' | 'in-progress' | 'pending'>('planned');
+  const { user } = useAuthStore();
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [availableSites, setAvailableSites] = useState<any[]>([]);
+  const [sitesWithoutAgent, setSitesWithoutAgent] = useState<any[]>([]);
+  const [siteAgentMap, setSiteAgentMap] = useState<Map<number, any>>(new Map());
+
+  const [selectedSites, setSelectedSites] = useState<any[]>([]);
+  const [showSiteSelector, setShowSiteSelector] = useState(false);
+  const [searchSite, setSearchSite] = useState("");
+  const [filteredSites, setFilteredSites] = useState<any[]>([]);
+  const [creationMode, setCreationMode] = useState<CreationMode>("plan");
+
+  // ✅ État pour la limitation contrôleur
+  const [hasExistingRoundToday, setHasExistingRoundToday] = useState(false);
+  const [existingRound, setExistingRound] = useState<any>(null);
+  const [isController, setIsController] = useState(false);
+  const [canCreateRound, setCanCreateRound] = useState(true);
+
+  const [formData, setFormData] = useState({
+    name: "",
+    scheduledStart: "",
+  });
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    loadRounds();
+    loadData();
+    checkExistingRounds();
   }, []);
 
-  const loadRounds = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const [planned, pending] = await Promise.all([
-        roundsService.getMyPlanned(),
-        roundsService.getPendingValidation(),
-      ]);
+  useEffect(() => {
+    filterSites();
+  }, [searchSite, availableSites, selectedSites]);
 
-      // Séparer les rondes planifiées et en cours
-      setPlannedRounds(planned.filter(r => r.status === 'PLANNED'));
-      setInProgressRounds(planned.filter(r => r.status === 'IN_PROGRESS'));
-      setPendingValidation(pending);
+  // ✅ Vérifier si l'utilisateur est un contrôleur (et non superviseur/admin)
+  // ✅ Vérifier si l'utilisateur est un contrôleur simple (et non superviseur/admin)
+  useEffect(() => {
+    if (user) {
+      // Le rôle est un string comme 'AGENT', 'CONTROLEUR', 'SUPERVISEUR', 'ADMIN', 'SUPERADMIN'
+      const userRole = user.role;
+
+      // Un contrôleur simple a le rôle 'CONTROLEUR' uniquement
+      // Les superviseurs ont 'SUPERVISEUR', les admins ont 'ADMIN', etc.
+      const isSimpleController = userRole === "CONTROLEUR";
+
+      setIsController(isSimpleController);
+    }
+  }, [user]);
+
+  const checkExistingRounds = async () => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const existingRounds = await roundsService.list({ date: today });
+
+      // Filtrer les rondes qui ne sont pas annulées
+      const activeRounds = existingRounds.filter(
+        (r: any) => r.status !== "CANCELLED",
+      );
+
+      if (activeRounds.length > 0) {
+        setHasExistingRoundToday(true);
+        setExistingRound(activeRounds[0]);
+        setCanCreateRound(false);
+      }
     } catch (error) {
-      console.error('Erreur de chargement:', error);
-      setError('Impossible de charger les rondes. Veuillez réessayer.');
+      console.error("Erreur vérification rondes existantes:", error);
+    }
+  };
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const sitesList = await sitesService.list({ isActive: true });
+      const assignments = await assignmentsService.getActive();
+
+      const agentMap = new Map<number, any>();
+      const sitesWithActiveAgent = new Set<number>();
+
+      assignments.forEach((assignment: any) => {
+        if (assignment.site?.id && assignment.agent) {
+          sitesWithActiveAgent.add(assignment.site.id);
+          agentMap.set(assignment.site.id, assignment.agent);
+        }
+      });
+
+      setSiteAgentMap(agentMap);
+
+      const withAgent: any[] = [];
+      const withoutAgent: any[] = [];
+
+      sitesList.forEach((site: any) => {
+        if (sitesWithActiveAgent.has(site.id)) {
+          withAgent.push(site);
+        } else {
+          withoutAgent.push(site);
+        }
+      });
+
+      setAvailableSites(withAgent);
+      setSitesWithoutAgent(withoutAgent);
+      setFilteredSites(withAgent);
+    } catch (error) {
+      console.error("Erreur de chargement:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleStartRound = async (roundId: number) => {
-    setIsStarting(roundId);
+  const filterSites = () => {
+    let filtered = availableSites.filter(
+      (site) => !selectedSites.find((s) => s.id === site.id),
+    );
+
+    if (searchSite.trim()) {
+      filtered = filtered.filter(
+        (site) =>
+          site.name.toLowerCase().includes(searchSite.toLowerCase()) ||
+          site.address.toLowerCase().includes(searchSite.toLowerCase()) ||
+          site.client?.name?.toLowerCase().includes(searchSite.toLowerCase()),
+      );
+    }
+
+    setFilteredSites(filtered);
+  };
+
+  const getAgentForSite = (siteId: number) => {
+    return siteAgentMap.get(siteId);
+  };
+
+  const handleAddSite = (site: any) => {
+    setSelectedSites((prev) => [...prev, site]);
+    setShowSiteSelector(false);
+    setSearchSite("");
+  };
+
+  const handleRemoveSite = (siteId: number) => {
+    setSelectedSites((prev) => prev.filter((s) => s.id !== siteId));
+  };
+
+  const handleMoveSite = (index: number, direction: "up" | "down") => {
+    const newSites = [...selectedSites];
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+
+    if (newIndex < 0 || newIndex >= newSites.length) return;
+
+    [newSites[index], newSites[newIndex]] = [
+      newSites[newIndex],
+      newSites[index],
+    ];
+    setSelectedSites(newSites);
+  };
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.name.trim()) {
+      newErrors.name = "Le nom de la ronde est requis";
+    }
+    if (!formData.scheduledStart) {
+      newErrors.scheduledStart = "La date et heure de début sont requises";
+    }
+    if (selectedSites.length === 0) {
+      newErrors.sites = "Veuillez sélectionner au moins un site";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent, mode: CreationMode) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    // ✅ Vérification supplémentaire pour les contrôleurs
+    if (isController && !canCreateRound) {
+      setErrors({
+        submit:
+          "Vous avez déjà une tournée aujourd'hui. Les contrôleurs sont limités à une tournée par jour.",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      const result = await roundsService.startAsController(roundId);
-      if (result) {
-        await loadRounds();
-        router.push(`/dashboard/controleur/rounds/${roundId}`);
+      if (networkMonitor.isSyncAllowed()) {
+        await serverTime.ensureSynced();
       }
-    } catch (error) {
-      console.error('Erreur démarrage:', error);
-      alert('Erreur lors du démarrage de la ronde');
+
+      const roundData = {
+        name: formData.name,
+        scheduledStart: formData.scheduledStart,
+        sites: selectedSites.map((site) => ({ id: site.id })),
+      };
+
+      const operationTime = {
+        clientTime: new Date().toISOString(),
+        clientTimestamp: Date.now(),
+        serverTimeEstimated: serverTime.isSynced()
+          ? serverTime.getServerISOString()
+          : undefined,
+        timeOffset: serverTime.isSynced() ? serverTime.getOffset() : undefined,
+      };
+
+      if (networkMonitor.isSyncAllowed() && serverTime.isSynced()) {
+        const result = await roundsService.create(roundData);
+
+        if (result) {
+          if (mode === "start" && result.id) {
+            try {
+              await roundsService.startAsController(result.id);
+            } catch (startError: any) {
+              // ✅ Gestion de l'erreur de tournée non clôturée
+              if (startError?.response?.status === 403) {
+                const data = startError.response.data;
+                alert(data.error);
+                // Rediriger vers la tournée non clôturée
+                if (data.unclosedRoundId) {
+                  router.push(
+                    `/dashboard/controleur/rounds/${data.unclosedRoundId}`,
+                  );
+                  return;
+                }
+              }
+              throw startError;
+            }
+          }
+          router.push("/dashboard/controleur/rounds");
+        }
+      } else {
+        const localId = `round_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        await offlineDB.addToSyncQueue({
+          type: "CREATE_ROUND",
+          entity: "round",
+          data: {
+            ...roundData,
+            localId,
+            _operationTime: operationTime,
+          },
+          clientTime: operationTime.clientTime,
+          clientTimestamp: operationTime.clientTimestamp,
+          serverTimeEstimated: operationTime.serverTimeEstimated,
+          timeOffset: operationTime.timeOffset,
+          createdAt: new Date().toISOString(),
+        });
+
+        if (mode === "start") {
+          await offlineDB.addToSyncQueue({
+            type: "START_ROUND",
+            entity: "round",
+            data: {
+              localId,
+              _operationTime: operationTime,
+            },
+            clientTime: operationTime.clientTime,
+            clientTimestamp: operationTime.clientTimestamp,
+            serverTimeEstimated: operationTime.serverTimeEstimated,
+            timeOffset: operationTime.timeOffset,
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        const message =
+          mode === "start"
+            ? "Ronde créée et sera démarrée localement. Elle sera synchronisée dès le retour de la connexion."
+            : "Ronde créée localement. Elle sera synchronisée dès le retour de la connexion.";
+
+        alert(message);
+        router.push("/dashboard/controleur/rounds");
+      }
+    } catch (error: any) {
+      console.error("Erreur de création:", error);
+
+      // ✅ Gestion spécifique de l'erreur de limitation
+      if (error?.response?.status === 403) {
+        const data = error.response.data;
+        if (data.existingRoundId) {
+          setErrors({
+            submit: data.error,
+          });
+          setHasExistingRoundToday(true);
+          setExistingRound({ id: data.existingRoundId });
+        } else {
+          setErrors({
+            submit: data.error || "Erreur lors de la création de la ronde",
+          });
+        }
+      } else {
+        setErrors({ submit: "Erreur lors de la création de la ronde" });
+      }
     } finally {
-      setIsStarting(null);
+      setIsSubmitting(false);
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const badges: Record<string, { color: string; text: string; icon: any }> = {
-      PLANNED: { color: 'bg-blue-100 text-blue-800', text: 'Planifiée', icon: faClock },
-      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', text: 'En cours', icon: faPlay },
-      COMPLETED: { color: 'bg-green-100 text-green-800', text: 'Terminée', icon: faCheckCircle },
-      CANCELLED: { color: 'bg-red-100 text-red-800', text: 'Annulée', icon: faClock },
-    };
-    return badges[status] || { color: 'bg-gray-100 text-gray-800', text: status, icon: faClock };
-  };
-
-  const displayedRounds = activeTab === 'planned' ? plannedRounds 
-    : activeTab === 'in-progress' ? inProgressRounds 
-    : pendingValidation;
-
-  const renderRoundCard = (round: Round) => {
-    const statusBadge = getStatusBadge(round.status);
-    const progress = round.progress || 0;
-    const isStartingThis = isStarting === round.id;
-
-    return (
-      <div key={round.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center mb-2">
-              <h3 className="font-semibold text-gray-900">{round.name}</h3>
-              <span className={`ml-3 px-2 py-1 rounded-full text-xs flex items-center ${statusBadge.color}`}>
-                <FontAwesomeIcon icon={statusBadge.icon} className="mr-1" />
-                {statusBadge.text}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mt-3">
-              <div className="flex items-center">
-                <FontAwesomeIcon icon={faUser} className="mr-2 text-gray-400 w-4" />
-                <span>Agent : {round.agent?.fullName || 'Non assigné'}</span>
-              </div>
-              <div className="flex items-center">
-                <FontAwesomeIcon icon={faClock} className="mr-2 text-gray-400 w-4" />
-                <span>{new Date(round.scheduledStart).toLocaleString('fr-FR')}</span>
-              </div>
-              <div className="flex items-center col-span-2">
-                <FontAwesomeIcon icon={faMapPin} className="mr-2 text-gray-400 w-4" />
-                <span>{round.sitesCount} site{round.sitesCount > 1 ? 's' : ''} à visiter</span>
-              </div>
-            </div>
-
-            {/* Progression */}
-            {round.status === 'IN_PROGRESS' && (
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-500">Progression</span>
-                  <span className="font-medium">{round.visitedSitesCount}/{round.sitesCount} sites</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-indigo-600 h-2 rounded-full transition-all"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-            
-            {/* Information validation en attente */}
-            {activeTab === 'pending' && round.validatedSitesCount !== undefined && (
-              <div className="mt-3 text-sm">
-                <span className="text-yellow-600">
-                  {round.validatedSitesCount || 0}/{round.sitesCount} sites validés
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="ml-4 flex flex-col space-y-2">
-            {round.status === 'PLANNED' && (
-              <button
-                onClick={() => handleStartRound(round.id)}
-                disabled={isStartingThis}
-                className="px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center whitespace-nowrap"
-              >
-                {isStartingThis ? (
-                  <FontAwesomeIcon icon={faSpinner} spin className="mr-1" />
-                ) : (
-                  <FontAwesomeIcon icon={faPlay} className="mr-1" />
-                )}
-                Démarrer
-              </button>
-            )}
-            {round.status === 'IN_PROGRESS' && (
-              <Link
-                href={`/dashboard/controleur/rounds/${round.id}`}
-                className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 flex items-center whitespace-nowrap"
-              >
-                <FontAwesomeIcon icon={faPlay} className="mr-1" />
-                Continuer
-              </Link>
-            )}
-            <Link
-              href={`/dashboard/controleur/rounds/${round.id}`}
-              className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 flex items-center whitespace-nowrap"
-            >
-              <FontAwesomeIcon icon={faEye} className="mr-1" />
-              Détails
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ✅ Affichage de l'erreur
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-            <span className="mr-3">🔄</span>
-            Mes rondes
-          </h1>
-        </div>
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <FontAwesomeIcon icon={faExclamationTriangle} className="text-4xl text-red-500 mb-4" />
-          <p className="text-red-600 mb-4">{error}</p>
-          <button
-            onClick={loadRounds}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center mx-auto"
-          >
-            <FontAwesomeIcon icon={faRotate} className="mr-2" />
-            Réessayer
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ✅ Affichage du chargement
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-            <span className="mr-3">🔄</span>
-            Mes rondes
-          </h1>
-        </div>
-        <div className="bg-white rounded-lg shadow p-12 flex items-center justify-center">
-          <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-indigo-600" />
-          <span className="ml-3 text-gray-600">Chargement des rondes...</span>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <FontAwesomeIcon
+          icon={faSpinner}
+          spin
+          className="text-3xl text-indigo-600"
+        />
       </div>
     );
   }
@@ -226,110 +349,459 @@ export default function ControleurRoundsPage() {
     <div className="space-y-6">
       {/* En-tête */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-            <span className="mr-3">🔄</span>
-            Mes rondes
+        <div className="flex items-center">
+          <button
+            onClick={() => router.back()}
+            className="mr-4 text-gray-500 hover:text-gray-700"
+          >
+            <FontAwesomeIcon icon={faArrowLeft} />
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Créer une nouvelle ronde
           </h1>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={loadRounds}
-              className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Actualiser"
-            >
-              <FontAwesomeIcon icon={faRotate} />
-            </button>
-            <Link
-              href="/dashboard/controleur/rounds/create"
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center"
-            >
-              <FontAwesomeIcon icon={faPlus} className="mr-2" />
-              Nouvelle ronde
-            </Link>
+        </div>
+        <p className="text-gray-600 mt-2 ml-10">
+          L'agent est automatiquement déduit du site sélectionné
+        </p>
+      </div>
+
+      {/* ✅ Alerte pour les contrôleurs qui ont déjà une tournée aujourd'hui */}
+      {isController && hasExistingRoundToday && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
+          <div className="flex items-start">
+            <FontAwesomeIcon
+              icon={faBan}
+              className="text-orange-600 mr-3 mt-1 text-xl"
+            />
+            <div className="flex-1">
+              <p className="font-medium text-orange-800 mb-2">
+                Vous avez déjà une tournée aujourd'hui
+              </p>
+              <p className="text-sm text-orange-700 mb-4">
+                Les contrôleurs sont limités à une seule tournée par jour. Vous
+                pouvez continuer votre tournée existante.
+              </p>
+              <div className="flex space-x-3">
+                <Link
+                  href={`/dashboard/controleur/rounds/${existingRound?.id}`}
+                  className="inline-block px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                >
+                  Voir ma tournée du jour
+                </Link>
+                <Link
+                  href="/dashboard/controleur/rounds"
+                  className="inline-block px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                >
+                  Retour aux rondes
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
-        
-        {/* Résumé */}
-        <div className="grid grid-cols-3 gap-4 mt-4">
-          <div className="bg-blue-50 rounded-lg p-3 text-center">
-            <p className="text-sm text-blue-600">Planifiées</p>
-            <p className="text-2xl font-bold text-blue-700">{plannedRounds.length}</p>
+      )}
+
+      {/* Message d'avertissement pour les sites sans agent */}
+      {sitesWithoutAgent.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <FontAwesomeIcon
+              icon={faInfoCircle}
+              className="text-yellow-600 mr-3 mt-1"
+            />
+            <div>
+              <p className="font-medium text-yellow-800 mb-1">
+                {sitesWithoutAgent.length} site(s) sans agent assigné
+              </p>
+              <p className="text-sm text-yellow-700">
+                Les sites suivants n'ont pas d'agent assigné actuellement et ne
+                peuvent pas être inclus dans une ronde :
+              </p>
+              <ul className="mt-2 text-sm text-yellow-700 list-disc list-inside">
+                {sitesWithoutAgent.slice(0, 5).map((site) => (
+                  <li key={site.id}>{site.name}</li>
+                ))}
+                {sitesWithoutAgent.length > 5 && (
+                  <li>et {sitesWithoutAgent.length - 5} autre(s)...</li>
+                )}
+              </ul>
+              <p className="text-sm text-yellow-700 mt-3">
+                <Link
+                  href="/dashboard/superviseur/assignments/create"
+                  className="text-indigo-600 hover:underline font-medium"
+                >
+                  Créer une assignation →
+                </Link>{" "}
+                pour ces sites afin de pouvoir les utiliser dans une ronde.
+              </p>
+            </div>
           </div>
-          <div className="bg-yellow-50 rounded-lg p-3 text-center">
-            <p className="text-sm text-yellow-600">En cours</p>
-            <p className="text-2xl font-bold text-yellow-700">{inProgressRounds.length}</p>
-          </div>
-          <div className="bg-green-50 rounded-lg p-3 text-center">
-            <p className="text-sm text-green-600">À valider</p>
-            <p className="text-2xl font-bold text-green-700">{pendingValidation.length}</p>
-          </div>
+        </div>
+      )}
+
+      {/* Message si aucun site disponible */}
+      {availableSites.length === 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 text-center">
+          <FontAwesomeIcon
+            icon={faExclamationTriangle}
+            className="text-4xl text-orange-500 mb-3"
+          />
+          <p className="font-medium text-orange-800 mb-2">
+            Aucun site avec agent assigné disponible
+          </p>
+          <p className="text-sm text-orange-700 mb-4">
+            Vous devez d'abord créer des assignations d'agents sur des sites
+            avant de pouvoir créer une ronde.
+          </p>
+          <Link
+            href="/dashboard/superviseur/assignments/create"
+            className="inline-block px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
+            Créer une assignation
+          </Link>
+        </div>
+      )}
+
+      {/* Choix du mode de création */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <label className="block text-sm font-medium text-gray-700 mb-3">
+          Mode de création
+        </label>
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            type="button"
+            onClick={() => setCreationMode("plan")}
+            className={`p-4 border-2 rounded-lg flex flex-col items-center transition-all ${
+              creationMode === "plan"
+                ? "border-indigo-500 bg-indigo-50"
+                : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <FontAwesomeIcon
+              icon={faCalendar}
+              className={`text-3xl mb-2 ${
+                creationMode === "plan" ? "text-indigo-600" : "text-gray-400"
+              }`}
+            />
+            <span
+              className={`font-medium ${
+                creationMode === "plan" ? "text-indigo-700" : "text-gray-600"
+              }`}
+            >
+              Planifier
+            </span>
+            <span className="text-xs text-gray-500 mt-1">
+              La ronde sera créée sans être démarrée
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCreationMode("start")}
+            className={`p-4 border-2 rounded-lg flex flex-col items-center transition-all ${
+              creationMode === "start"
+                ? "border-green-500 bg-green-50"
+                : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <FontAwesomeIcon
+              icon={faPlay}
+              className={`text-3xl mb-2 ${
+                creationMode === "start" ? "text-green-600" : "text-gray-400"
+              }`}
+            />
+            <span
+              className={`font-medium ${
+                creationMode === "start" ? "text-green-700" : "text-gray-600"
+              }`}
+            >
+              Démarrer maintenant
+            </span>
+            <span className="text-xs text-gray-500 mt-1">
+              La ronde sera créée et démarrée immédiatement
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* Onglets */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="border-b">
-          <div className="flex">
-            <button
-              onClick={() => setActiveTab('planned')}
-              className={`px-6 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'planned'
-                  ? 'text-indigo-600 border-b-2 border-indigo-600'
-                  : 'text-gray-500 hover:text-gray-700'
+      {/* Formulaire */}
+      <div
+        className={`bg-white rounded-lg shadow p-6 ${availableSites.length === 0 || (isController && !canCreateRound) ? "opacity-50 pointer-events-none" : ""}`}
+      >
+        <form
+          onSubmit={(e) => handleSubmit(e, creationMode)}
+          className="space-y-6"
+        >
+          {/* Nom de la ronde */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              📝 Nom de la ronde *
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
+              placeholder="Ex: Ronde matinale - Afriland"
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                errors.name ? "border-red-500" : "border-gray-300"
               }`}
-            >
-              📋 Planifiées ({plannedRounds.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('in-progress')}
-              className={`px-6 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'in-progress'
-                  ? 'text-indigo-600 border-b-2 border-indigo-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              ▶️ En cours ({inProgressRounds.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('pending')}
-              className={`px-6 py-3 text13 font-medium transition-colors ${
-                activeTab === 'pending'
-                  ? 'text-indigo-600 border-b-2 border-indigo-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              ✅ À valider ({pendingValidation.length})
-            </button>
+              disabled={isController && !canCreateRound}
+            />
+            {errors.name && (
+              <p className="text-red-600 text-sm mt-1">{errors.name}</p>
+            )}
           </div>
-        </div>
 
-        {/* Liste des rondes */}
-        <div className="p-6">
-          {displayedRounds.length === 0 ? (
-            <div className="text-center py-8">
-              <span className="text-4xl mb-3 block">📋</span>
-              <p className="text-gray-500">
-                {activeTab === 'planned' && 'Aucune ronde planifiée'}
-                {activeTab === 'in-progress' && 'Aucune ronde en cours'}
-                {activeTab === 'pending' && 'Aucune ronde en attente de validation'}
+          {/* Date de début */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <FontAwesomeIcon icon={faCalendar} className="mr-2" />
+              Date et heure de début *
+            </label>
+            <input
+              type="datetime-local"
+              value={formData.scheduledStart}
+              onChange={(e) =>
+                setFormData({ ...formData, scheduledStart: e.target.value })
+              }
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                errors.scheduledStart ? "border-red-500" : "border-gray-300"
+              }`}
+              disabled={isController && !canCreateRound}
+            />
+            {errors.scheduledStart && (
+              <p className="text-red-600 text-sm mt-1">
+                {errors.scheduledStart}
               </p>
-              {activeTab === 'planned' && (
+            )}
+          </div>
+
+          {/* Sites à visiter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <FontAwesomeIcon icon={faMapPin} className="mr-2" />
+              Sites à visiter *
+            </label>
+
+            {selectedSites.length > 0 && (
+              <div className="mb-4 space-y-2">
+                <p className="text-sm text-gray-500">
+                  {selectedSites.length} site
+                  {selectedSites.length > 1 ? "s" : ""} sélectionné
+                  {selectedSites.length > 1 ? "s" : ""} (dans l'ordre de visite)
+                </p>
+                {selectedSites.map((site, index) => {
+                  const agent = getAgentForSite(site.id);
+                  return (
+                    <div
+                      key={site.id}
+                      className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg"
+                    >
+                      <div className="flex items-center flex-1">
+                        <span className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-medium mr-3">
+                          {index + 1}
+                        </span>
+                        <div className="flex-1">
+                          <p className="font-medium">{site.name}</p>
+                          <p className="text-sm text-gray-500">
+                            {site.address}
+                          </p>
+                          <p className="text-xs text-green-600 mt-1">
+                            <FontAwesomeIcon icon={faUser} className="mr-1" />
+                            Agent : {agent ? agent.fullName : "Non trouvé"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 ml-4">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveSite(index, "up")}
+                          disabled={index === 0}
+                          className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                        >
+                          <FontAwesomeIcon icon={faChevronUp} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveSite(index, "down")}
+                          disabled={index === selectedSites.length - 1}
+                          className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                        >
+                          <FontAwesomeIcon icon={faChevronDown} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSite(site.id)}
+                          className="p-1 text-red-500 hover:text-red-700"
+                        >
+                          <FontAwesomeIcon icon={faTrash} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowSiteSelector(true)}
+              disabled={
+                availableSites.length === 0 || (isController && !canCreateRound)
+              }
+              className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors flex items-center justify-center disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:text-gray-500"
+            >
+              <FontAwesomeIcon icon={faPlus} className="mr-2" />
+              Ajouter un site
+            </button>
+
+            {errors.sites && (
+              <p className="text-red-600 text-sm mt-1">{errors.sites}</p>
+            )}
+          </div>
+
+          {errors.submit && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-red-800">{errors.submit}</p>
+              {hasExistingRoundToday && existingRound && (
                 <Link
-                  href="/dashboard/controleur/rounds/create"
-                  className="mt-4 inline-block px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                  href={`/dashboard/controleur/rounds/${existingRound.id}`}
+                  className="mt-2 inline-block text-indigo-600 hover:underline text-sm"
                 >
-                  <FontAwesomeIcon icon={faPlus} className="mr-2" />
-                  Créer une ronde
+                  → Voir ma tournée existante
                 </Link>
               )}
             </div>
-          ) : (
-            <div className="space-y-4">
-              {displayedRounds.map(renderRoundCard)}
-            </div>
           )}
-        </div>
+
+          <div className="flex justify-end space-x-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="px-6 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={
+                isSubmitting ||
+                availableSites.length === 0 ||
+                (isController && !canCreateRound)
+              }
+              className={`px-6 py-3 text-white rounded-lg disabled:opacity-50 flex items-center ${
+                creationMode === "start"
+                  ? "bg-green-600 hover:bg-green-700"
+                  : "bg-indigo-600 hover:bg-indigo-700"
+              }`}
+            >
+              {isSubmitting ? (
+                <>
+                  <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
+                  Création...
+                </>
+              ) : (
+                <>
+                  <FontAwesomeIcon
+                    icon={creationMode === "start" ? faPlay : faSave}
+                    className="mr-2"
+                  />
+                  {creationMode === "start"
+                    ? "Créer et démarrer"
+                    : "Créer la ronde"}
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
+
+      {/* Modal sélecteur de site */}
+      {showSiteSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Sélectionner un site</h2>
+                <button
+                  onClick={() => {
+                    setShowSiteSelector(false);
+                    setSearchSite("");
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Seuls les sites avec un agent assigné sont affichés
+              </p>
+              <div className="mt-3 relative">
+                <FontAwesomeIcon
+                  icon={faSearch}
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                />
+                <input
+                  type="text"
+                  placeholder="Rechercher un site..."
+                  value={searchSite}
+                  onChange={(e) => setSearchSite(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto p-4">
+              {filteredSites.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">
+                  Aucun site disponible
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {filteredSites.map((site) => {
+                    const agent = getAgentForSite(site.id);
+                    return (
+                      <button
+                        key={site.id}
+                        type="button"
+                        onClick={() => handleAddSite(site)}
+                        className="w-full text-left p-4 border rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-all"
+                      >
+                        <p className="font-medium">{site.name}</p>
+                        <p className="text-sm text-gray-500">{site.address}</p>
+                        {site.client && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            Client : {site.client.name}
+                          </p>
+                        )}
+                        <p className="text-xs mt-1 flex items-center text-green-600">
+                          <FontAwesomeIcon icon={faUser} className="mr-1" />
+                          Agent :{" "}
+                          {agent ? agent.fullName : "Aucun agent assigné"}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t">
+              <button
+                onClick={() => {
+                  setShowSiteSelector(false);
+                  setSearchSite("");
+                }}
+                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

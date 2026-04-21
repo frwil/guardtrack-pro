@@ -34,7 +34,7 @@ class RoundController extends AbstractController
     ) {}
 
     // ============================================================
-    // 1. ROUTES SANS PARAMÈTRE (en premier !)
+    // 1. ROUTES SANS PARAMÈTRE
     // ============================================================
 
     #[Route('', name: 'api_rounds_list', methods: ['GET'])]
@@ -70,6 +70,31 @@ class RoundController extends AbstractController
         /** @var User $currentUser */
         $currentUser = $this->getUser();
 
+        // ✅ RÈGLE 1 : Un contrôleur ne peut créer qu'une seule tournée par jour
+        if ($currentUser->isControleur() && !$currentUser->isSuperviseur() && !$currentUser->isAdmin()) {
+            $today = new \DateTimeImmutable('today');
+            $tomorrow = new \DateTimeImmutable('tomorrow');
+            
+            $existingRounds = $this->roundRepository->createQueryBuilder('r')
+                ->where('r.supervisor = :user')
+                ->andWhere('r.scheduledStart >= :today')
+                ->andWhere('r.scheduledStart < :tomorrow')
+                ->andWhere('r.status != :cancelled')
+                ->setParameter('user', $currentUser)
+                ->setParameter('today', $today)
+                ->setParameter('tomorrow', $tomorrow)
+                ->setParameter('cancelled', 'CANCELLED')
+                ->getQuery()
+                ->getResult();
+            
+            if (count($existingRounds) > 0) {
+                return $this->json([
+                    'error' => 'Vous avez déjà créé une tournée aujourd\'hui. Les contrôleurs sont limités à une tournée par jour.',
+                    'existingRoundId' => $existingRounds[0]->getId(),
+                ], Response::HTTP_FORBIDDEN);
+            }
+        }
+
         $agentId = $data['agentId'] ?? null;
         if (!$agentId && isset($data['sites']) && !empty($data['sites'])) {
             $firstSiteId = $data['sites'][0]['id'] ?? null;
@@ -100,12 +125,10 @@ class RoundController extends AbstractController
         $round->setScheduledEnd(isset($data['scheduledEnd']) ? new \DateTimeImmutable($data['scheduledEnd']) : null);
         $round->setStatus('PLANNED');
 
-        // ✅ Assigner le contrôleur connecté comme superviseur (version corrigée)
         if ($currentUser) {
             $round->setSupervisor($currentUser);
         }
 
-        // Si un supervisorId est explicitement fourni, il écrase le contrôleur connecté
         if (isset($data['supervisorId'])) {
             $supervisor = $this->userRepository->find($data['supervisorId']);
             if ($supervisor) {
@@ -113,7 +136,6 @@ class RoundController extends AbstractController
             }
         }
 
-        // Ajouter les sites
         if (isset($data['sites']) && is_array($data['sites'])) {
             foreach ($data['sites'] as $index => $siteData) {
                 $site = $this->siteRepository->find($siteData['id']);
@@ -147,7 +169,7 @@ class RoundController extends AbstractController
     }
 
     // ============================================================
-    // 2. ROUTES AVEC PARTIES FIXES (AVANT les paramètres)
+    // 2. ROUTES AVEC PARTIES FIXES
     // ============================================================
 
     #[Route('/active', name: 'api_rounds_active', methods: ['GET'])]
@@ -239,7 +261,7 @@ class RoundController extends AbstractController
     }
 
     // ============================================================
-    // 3. ROUTES AVEC PARAMÈTRE {id} (en dernier !)
+    // 3. ROUTES AVEC PARAMÈTRE {id}
     // ============================================================
 
     #[Route('/{id}', name: 'api_rounds_show', methods: ['GET'])]
@@ -254,7 +276,6 @@ class RoundController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
 
-        // Vérifier les permissions
         if ($user->getRole() === User::ROLE_AGENT && $round->getAgent()?->getId() !== $user->getId()) {
             return $this->json(['error' => 'Access denied'], Response::HTTP_FORBIDDEN);
         }
@@ -308,7 +329,32 @@ class RoundController extends AbstractController
         $user = $this->getUser();
 
         if ($round->getSupervisor()?->getId() !== $user->getId()) {
-            return $this->json(['error' => 'You are not assigned to this round'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Access denied'], Response::HTTP_FORBIDDEN);
+        }
+
+        // ✅ Clôture automatique des rondes terminées de la veille
+        $this->autoCloseCompletedRounds($user);
+
+        // ✅ RÈGLE 3 : Vérifier qu'il n'y a pas de tournée non clôturée des jours précédents
+        $today = new \DateTimeImmutable('today');
+        
+        $unclosedRounds = $this->roundRepository->createQueryBuilder('r')
+            ->where('r.supervisor = :user')
+            ->andWhere('r.scheduledStart < :today')
+            ->andWhere('r.status IN (:statuses)')
+            ->setParameter('user', $user)
+            ->setParameter('today', $today)
+            ->setParameter('statuses', ['PLANNED', 'IN_PROGRESS'])
+            ->getQuery()
+            ->getResult();
+        
+        if (count($unclosedRounds) > 0) {
+            $unclosedRound = $unclosedRounds[0];
+            return $this->json([
+                'error' => 'Vous avez une tournée non clôturée du ' . $unclosedRound->getScheduledStart()->format('d/m/Y') . '. Veuillez la clôturer avant de commencer une nouvelle tournée.',
+                'unclosedRoundId' => $unclosedRound->getId(),
+                'unclosedRoundName' => $unclosedRound->getName(),
+            ], Response::HTTP_FORBIDDEN);
         }
 
         if ($round->getStatus() !== 'PLANNED') {
@@ -358,6 +404,69 @@ class RoundController extends AbstractController
         ]);
     }
 
+    #[Route('/{id}/close', name: 'api_rounds_close', methods: ['PATCH'])]
+    #[IsGranted('ROLE_CONTROLEUR')]
+    public function closeRound(int $id): JsonResponse
+    {
+        $round = $this->roundRepository->find($id);
+        
+        if (!$round) {
+            return $this->json(['error' => 'Round not found'], Response::HTTP_NOT_FOUND);
+        }
+        
+        /** @var User $user */
+        $user = $this->getUser();
+        
+        if ($round->getSupervisor()?->getId() !== $user->getId()) {
+            return $this->json(['error' => 'Access denied'], Response::HTTP_FORBIDDEN);
+        }
+        
+        if (in_array($round->getStatus(), ['COMPLETED', 'CANCELLED'])) {
+            return $this->json(['error' => 'Round already closed'], Response::HTTP_CONFLICT);
+        }
+        
+        // ✅ Vérifier si tous les sites sont visités avant d'autoriser la clôture manuelle
+        $allSitesVisited = true;
+        $visitedCount = 0;
+        $totalCount = $round->getRoundSites()->count();
+        
+        foreach ($round->getRoundSites() as $roundSite) {
+            if ($roundSite->getVisitedAt() !== null) {
+                $visitedCount++;
+            } else {
+                $allSitesVisited = false;
+            }
+        }
+        
+        // Si la ronde est d'aujourd'hui ou future, on peut la clôturer manuellement même sans tous les sites
+        $today = new \DateTimeImmutable('today');
+        $isTodayOrFuture = $round->getScheduledStart() >= $today;
+        
+        // Pour les rondes passées, on ne peut clôturer manuellement QUE si tous les sites sont visités
+        if (!$isTodayOrFuture && !$allSitesVisited) {
+            return $this->json([
+                'error' => sprintf(
+                    'Cette ronde ne peut pas être clôturée manuellement car tous les sites n\'ont pas été visités (%d/%d). Elle sera automatiquement clôturée demain à 7h si tous les sites sont visités.',
+                    $visitedCount,
+                    $totalCount
+                ),
+                'visitedCount' => $visitedCount,
+                'totalCount' => $totalCount,
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $round->setStatus('COMPLETED');
+        $round->setActualEnd(new \DateTimeImmutable());
+        
+        $this->entityManager->flush();
+        
+        return $this->json([
+            'status' => 'COMPLETED',
+            'actualEnd' => $round->getActualEnd()->format('c'),
+            'autoClosed' => false,
+        ]);
+    }
+
     #[Route('/{id}/cancel', name: 'api_rounds_cancel', methods: ['PATCH'])]
     #[IsGranted('ROLE_SUPERVISEUR')]
     public function cancel(int $id): JsonResponse
@@ -376,6 +485,83 @@ class RoundController extends AbstractController
         $this->entityManager->flush();
 
         return $this->json(['status' => 'CANCELLED']);
+    }
+
+    #[Route('/{id}/add-sites', name: 'api_rounds_add_sites', methods: ['POST'])]
+    #[IsGranted('ROLE_CONTROLEUR')]
+    public function addSites(int $id, Request $request): JsonResponse
+    {
+        $round = $this->roundRepository->find($id);
+        
+        if (!$round) {
+            return $this->json(['error' => 'Round not found'], Response::HTTP_NOT_FOUND);
+        }
+        
+        /** @var User $user */
+        $user = $this->getUser();
+        
+        if ($round->getSupervisor()?->getId() !== $user->getId()) {
+            return $this->json(['error' => 'Access denied'], Response::HTTP_FORBIDDEN);
+        }
+        
+        // ✅ RÈGLE 2 : On ne peut ajouter des sites que si la tournée n'est pas clôturée
+        if (in_array($round->getStatus(), ['COMPLETED', 'CANCELLED'])) {
+            return $this->json([
+                'error' => 'Impossible d\'ajouter des sites à une tournée clôturée.',
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $data = json_decode($request->getContent(), true);
+        $siteIds = $data['siteIds'] ?? [];
+        
+        if (empty($siteIds)) {
+            return $this->json(['error' => 'Aucun site fourni'], Response::HTTP_BAD_REQUEST);
+        }
+        
+        $maxOrder = 0;
+        foreach ($round->getRoundSites() as $roundSite) {
+            $maxOrder = max($maxOrder, $roundSite->getVisitOrder());
+        }
+        
+        $addedSites = [];
+        
+        foreach ($siteIds as $siteId) {
+            $existing = $this->roundSiteRepository->findOneBy([
+                'round' => $round,
+                'site' => $siteId
+            ]);
+            
+            if ($existing) {
+                continue;
+            }
+            
+            $site = $this->siteRepository->find($siteId);
+            if (!$site) {
+                continue;
+            }
+            
+            $roundSite = new RoundSite();
+            $roundSite->setRound($round);
+            $roundSite->setSite($site);
+            $roundSite->setVisitOrder(++$maxOrder);
+            
+            $this->entityManager->persist($roundSite);
+            $round->addRoundSite($roundSite);
+            
+            $addedSites[] = [
+                'id' => $site->getId(),
+                'name' => $site->getName(),
+                'visitOrder' => $maxOrder,
+            ];
+        }
+        
+        $this->entityManager->flush();
+        
+        return $this->json([
+            'message' => count($addedSites) . ' site(s) ajouté(s)',
+            'addedSites' => $addedSites,
+            'totalSites' => $round->getRoundSites()->count(),
+        ]);
     }
 
     #[Route('/{id}/validate-all', name: 'api_rounds_validate_all', methods: ['PATCH'])]
@@ -474,17 +660,12 @@ class RoundController extends AbstractController
 
         $allVisited = $round->getRoundSites()->forAll(fn($i, $rs) => $rs->getVisitedAt() !== null);
 
-        if ($allVisited) {
-            $round->setStatus('COMPLETED');
-            $round->setActualEnd(new \DateTimeImmutable());
-        }
-
         $this->entityManager->flush();
 
         return $this->json([
             'visited' => true,
             'visitedAt' => $roundSite->getVisitedAt()->format('c'),
-            'roundCompleted' => $allVisited,
+            'allSitesVisited' => $allVisited,
             'remainingSites' => $round->getRoundSites()->filter(fn($rs) => !$rs->getVisitedAt())->count(),
         ]);
     }
@@ -539,17 +720,12 @@ class RoundController extends AbstractController
 
         $allVisited = $round->getRoundSites()->forAll(fn($i, $rs) => $rs->getVisitedAt() !== null);
 
-        if ($allVisited && $round->getStatus() === 'IN_PROGRESS') {
-            $round->setStatus('COMPLETED');
-            $round->setActualEnd(new \DateTimeImmutable());
-        }
-
         $this->entityManager->flush();
 
         return $this->json([
             'success' => true,
             'roundSite' => $this->formatRoundSite($roundSite),
-            'roundCompleted' => $allVisited,
+            'allSitesVisited' => $allVisited,
         ]);
     }
 
@@ -597,6 +773,103 @@ class RoundController extends AbstractController
     // ============================================================
     // MÉTHODES PRIVÉES
     // ============================================================
+
+    /**
+     * Clôture automatiquement les rondes terminées de la veille (si tous les sites visités et après 7h)
+     */
+    private function autoCloseCompletedRounds(User $user): void
+    {
+        $now = new \DateTimeImmutable();
+        $sevenAmToday = new \DateTimeImmutable('today 07:00:00');
+        
+        // Ne clôturer que s'il est au moins 7h
+        if ($now < $sevenAmToday) {
+            return;
+        }
+        
+        $yesterday = new \DateTimeImmutable('yesterday');
+        $yesterdayStart = $yesterday->setTime(0, 0, 0);
+        $yesterdayEnd = $yesterday->setTime(23, 59, 59);
+        
+        $rounds = $this->roundRepository->createQueryBuilder('r')
+            ->where('r.supervisor = :user')
+            ->andWhere('r.status = :status')
+            ->andWhere('r.scheduledStart BETWEEN :start AND :end')
+            ->setParameter('user', $user)
+            ->setParameter('status', 'IN_PROGRESS')
+            ->setParameter('start', $yesterdayStart)
+            ->setParameter('end', $yesterdayEnd)
+            ->getQuery()
+            ->getResult();
+        
+        foreach ($rounds as $round) {
+            $allSitesVisited = true;
+            foreach ($round->getRoundSites() as $roundSite) {
+                if ($roundSite->getVisitedAt() === null) {
+                    $allSitesVisited = false;
+                    break;
+                }
+            }
+            
+            if ($allSitesVisited) {
+                $round->setStatus('COMPLETED');
+                $round->setActualEnd(new \DateTimeImmutable());
+            }
+        }
+        
+        $this->entityManager->flush();
+    }
+
+    private function handleAgentPresence(RoundSite $roundSite, User $controller, array $data): void
+    {
+        $site = $roundSite->getSite();
+        $round = $roundSite->getRound();
+        $today = new \DateTimeImmutable('today');
+        $tomorrow = new \DateTimeImmutable('tomorrow');
+
+        $agentPresence = $this->presenceRepository->createQueryBuilder('p')
+            ->where('p.site = :site')
+            ->andWhere('p.checkIn >= :today')
+            ->andWhere('p.checkIn < :tomorrow')
+            ->setParameter('site', $site)
+            ->setParameter('today', $today)
+            ->setParameter('tomorrow', $tomorrow)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        $verdict = $data['agentPresenceStatus'] ?? null;
+
+        if ($agentPresence) {
+            $agentPresence->applyControllerVerdict(
+                $controller,
+                $verdict,
+                $data['absenceReason'] ?? null,
+                $data['comments'] ?? null
+            );
+            $agentPresence->setControllerPhotoAnalysis($data['photoAnalysis'] ?? null);
+            $agentPresence->setControllerDistanceFromSite($data['distanceFromSite'] ?? null);
+            $roundSite->addValidatedPresence($agentPresence);
+        } elseif ($verdict) {
+            $newPresence = new Presence();
+            $newPresence->setSite($site);
+            $newPresence->setAgent($round->getAgent());
+            $newPresence->setCheckIn(new \DateTimeImmutable());
+            $newPresence->setStatus($verdict === Presence::VERDICT_PRESENT ? Presence::STATUS_VALIDATED : Presence::STATUS_REJECTED);
+            $newPresence->setController($controller);
+            $newPresence->setControllerVerdict($verdict);
+            $newPresence->setControllerValidationAt(new \DateTimeImmutable());
+            $newPresence->setControllerComment($data['comments'] ?? null);
+            $newPresence->setAbsenceReason($data['absenceReason'] ?? null);
+            $newPresence->setGpsLatitude($data['gpsLatitude'] ?? null);
+            $newPresence->setGpsLongitude($data['gpsLongitude'] ?? null);
+            $newPresence->setPhoto($data['photo'] ?? null);
+            $newPresence->setControllerPhotoAnalysis($data['photoAnalysis'] ?? null);
+            $newPresence->setControllerDistanceFromSite($data['distanceFromSite'] ?? null);
+            $this->entityManager->persist($newPresence);
+            $roundSite->addValidatedPresence($newPresence);
+        }
+    }
 
     private function formatRound(Round $round, bool $includeDetails = false): array
     {
@@ -662,57 +935,5 @@ class RoundController extends AbstractController
             'hasPhoto' => $roundSite->getPhoto() !== null,
             'isComplete' => $roundSite->isComplete(),
         ];
-    }
-
-    private function handleAgentPresence(RoundSite $roundSite, User $controller, array $data): void
-    {
-        $site = $roundSite->getSite();
-        $round = $roundSite->getRound(); // ✅ Ajouter cette ligne
-        $today = new \DateTimeImmutable('today');
-        $tomorrow = new \DateTimeImmutable('tomorrow');
-
-        $agentPresence = $this->presenceRepository->createQueryBuilder('p')
-            ->where('p.site = :site')
-            ->andWhere('p.checkIn >= :today')
-            ->andWhere('p.checkIn < :tomorrow')
-            ->setParameter('site', $site)
-            ->setParameter('today', $today)
-            ->setParameter('tomorrow', $tomorrow)
-            ->setMaxResults(1)
-            ->getQuery()
-            ->getOneOrNullResult();
-
-        $verdict = $data['agentPresenceStatus'] ?? null;
-
-        if ($agentPresence) {
-            $agentPresence->applyControllerVerdict(
-                $controller,
-                $verdict,
-                $data['absenceReason'] ?? null,
-                $data['comments'] ?? null
-            );
-            $agentPresence->setControllerPhotoAnalysis($data['photoAnalysis'] ?? null);
-            $agentPresence->setControllerDistanceFromSite($data['distanceFromSite'] ?? null);
-            $roundSite->addValidatedPresence($agentPresence);
-        } elseif ($verdict) {
-            $newPresence = new Presence();
-            $newPresence->setSite($site);
-            // ✅ AJOUTER L'AGENT
-            $newPresence->setAgent($round->getAgent());
-            $newPresence->setCheckIn(new \DateTimeImmutable());
-            $newPresence->setStatus($verdict === Presence::VERDICT_PRESENT ? Presence::STATUS_VALIDATED : Presence::STATUS_REJECTED);
-            $newPresence->setController($controller);
-            $newPresence->setControllerVerdict($verdict);
-            $newPresence->setControllerValidationAt(new \DateTimeImmutable());
-            $newPresence->setControllerComment($data['comments'] ?? null);
-            $newPresence->setAbsenceReason($data['absenceReason'] ?? null);
-            $newPresence->setGpsLatitude($data['gpsLatitude'] ?? null);
-            $newPresence->setGpsLongitude($data['gpsLongitude'] ?? null);
-            $newPresence->setPhoto($data['photo'] ?? null);
-            $newPresence->setControllerPhotoAnalysis($data['photoAnalysis'] ?? null);
-            $newPresence->setControllerDistanceFromSite($data['distanceFromSite'] ?? null);
-            $this->entityManager->persist($newPresence);
-            $roundSite->addValidatedPresence($newPresence);
-        }
     }
 }

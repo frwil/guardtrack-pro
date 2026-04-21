@@ -46,7 +46,6 @@ export interface RoundSite {
   isComplete: boolean;
 }
 
-// ✅ Tous les champs optionnels sont maintenant `undefined` au lieu de `null`
 export interface ControllerVisitData {
   agentPresenceStatus: 'PRESENT' | 'ABSENT';
   gpsLatitude?: number;
@@ -60,10 +59,9 @@ export interface ControllerVisitData {
   distanceFromSite?: number;
 }
 
-// ✅ Interface pour la création de ronde (agentId optionnel)
 export interface CreateRoundData {
   name: string;
-  agentId?: number;        // ✅ Optionnel - sera déduit du premier site si non fourni
+  agentId?: number;
   scheduledStart: string;
   scheduledEnd?: string;
   supervisorId?: number;
@@ -91,7 +89,6 @@ export const roundsService = {
     return response.data || null;
   },
 
-  // ✅ Mise à jour : agentId devient optionnel
   async create(data: CreateRoundData): Promise<{ id: number; name: string; agent?: { id: number; fullName: string }; sitesCount?: number } | null> {
     const response = await apiClient.post<{ id: number; name: string; agent?: { id: number; fullName: string }; sitesCount?: number }>('/rounds', data);
     return response.data || null;
@@ -163,11 +160,26 @@ export const roundsService = {
     return response.data || null;
   },
 
+  // ✅ Nouvelle méthode : Clôturer une tournée
+  async closeRound(id: number): Promise<{ status: string; actualEnd: string; autoClosed: boolean } | null> {
+    const response = await apiClient.patch<{ status: string; actualEnd: string; autoClosed: boolean }>(`/rounds/${id}/close`);
+    return response.data || null;
+  },
+
+  // ✅ Nouvelle méthode : Ajouter des sites à une tournée
+  async addSites(roundId: number, siteIds: number[]): Promise<{ message: string; addedSites: any[]; totalSites: number } | null> {
+    const response = await apiClient.post<{ message: string; addedSites: any[]; totalSites: number }>(
+      `/rounds/${roundId}/add-sites`,
+      { siteIds }
+    );
+    return response.data || null;
+  },
+
   async controllerVisitSite(
     roundId: number, 
     siteId: number, 
     data: ControllerVisitData
-  ): Promise<{ success: boolean; roundSite: RoundSite; roundCompleted: boolean } | null> {
+  ): Promise<{ success: boolean; roundSite: RoundSite; allSitesVisited: boolean } | null> {
     // Nettoyer les données : ne garder que les champs définis
     const cleanData: Record<string, any> = {
       agentPresenceStatus: data.agentPresenceStatus,
@@ -183,7 +195,7 @@ export const roundsService = {
     if (data.photoAnalysis !== undefined) cleanData.photoAnalysis = data.photoAnalysis;
     if (data.distanceFromSite !== undefined) cleanData.distanceFromSite = data.distanceFromSite;
 
-    const response = await apiClient.post<{ success: boolean; roundSite: RoundSite; roundCompleted: boolean }>(
+    const response = await apiClient.post<{ success: boolean; roundSite: RoundSite; allSitesVisited: boolean }>(
       `/rounds/${roundId}/sites/${siteId}/controller-visit`, 
       cleanData
     );
