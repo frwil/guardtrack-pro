@@ -64,7 +64,7 @@ export default function ControleurAgentsPage() {
       
       for (const agent of agentsList) {
         try {
-          const url = `${process.env.NEXT_PUBLIC_API_URL}/api/presences?agentId=${agent.id}&date=${todayStr}`;
+          const url = `${process.env.NEXT_PUBLIC_API_URL}/presences?agentId=${agent.id}&date=${todayStr}`;
           console.log(`🔗 [${agent.id}] URL appelée:`, url);
           
           // Appel direct fetch pour voir la réponse brute
