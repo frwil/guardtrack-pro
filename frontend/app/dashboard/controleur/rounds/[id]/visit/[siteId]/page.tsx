@@ -9,7 +9,6 @@ import {
   faQrcode,
   faKey,
   faCamera,
-  faUser,
   faUserCheck,
   faUserXmark,
   faPen,
@@ -17,17 +16,11 @@ import {
   faArrowRight,
   faArrowLeft,
   faSpinner,
-  faCircleCheck,
-  faTriangleExclamation,
-  faRobot,
-  faUsers,
-  faUserTie,
   faRotate,
   faLightbulb,
+  faStop,
 } from "@fortawesome/free-solid-svg-icons";
-
-// Import dynamique pour jsQR
-let jsQR: any = null;
+import { Html5Qrcode } from "html5-qrcode";
 
 type Step =
   | "geoloc"
@@ -56,53 +49,38 @@ export default function ControllerVisitPage() {
   const [pinCode, setPinCode] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [photoAnalysis, setPhotoAnalysis] = useState<any>(null);
-  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
   const [agentPresenceStatus, setAgentPresenceStatus] = useState<
     "PRESENT" | "ABSENT" | null
   >(null);
   const [absenceReason, setAbsenceReason] = useState("");
   const [comments, setComments] = useState("");
-  const [smartSuggestions, setSmartSuggestions] = useState<string[]>([]);
 
-  // Scanner QR code
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isScanning, setIsScanning] = useState(false);
+  // Scanner QR code avec html5-qrcode
   const [hasCamera, setHasCamera] = useState(true);
-  const [torchEnabled, setTorchEnabled] = useState(false);
-  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
-  const [isCameraLoading, setIsCameraLoading] = useState(false);
-  const streamRef = useRef<MediaStream | null>(null);
-  const scanIntervalRef = useRef<any>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [cameras, setCameras] = useState<any[]>([]);
+  const [currentCamera, setCurrentCamera] = useState<string>("");
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerId = "qr-reader";
 
   useEffect(() => {
     loadRoundSite();
     
-    // Charger jsQR dynamiquement
-    import("jsqr")
-      .then((module) => {
-        jsQR = module.default;
-        console.log('✅ jsQR chargé avec succès');
-      })
-      .catch((err) => {
-        console.error('❌ Erreur chargement jsQR:', err);
-      });
+    // Initialiser le scanner
+    scannerRef.current = new Html5Qrcode(scannerContainerId);
 
     return () => {
-      stopCamera();
-      if (scanIntervalRef.current) {
-        cancelAnimationFrame(scanIntervalRef.current);
-      }
+      stopScanner();
     };
   }, []);
 
   useEffect(() => {
     if (currentStep === "qr") {
-      startCamera();
+      startScanner();
     } else {
-      stopCamera();
+      stopScanner();
     }
-  }, [currentStep, facingMode]);
+  }, [currentStep]);
 
   const loadRoundSite = async () => {
     const round = await roundsService.getById(roundId);
@@ -169,122 +147,100 @@ export default function ControllerVisitPage() {
   };
 
   // ============================================================
-  // ÉTAPE 2 : SCAN QR CODE
+  // ÉTAPE 2 : SCAN QR CODE (html5-qrcode)
   // ============================================================
-  const startCamera = async () => {
-    setIsCameraLoading(true);
+  const startScanner = async () => {
+    if (!scannerRef.current) return;
+
     try {
-      const constraints: MediaTrackConstraints = {
-        facingMode: facingMode,
-      };
+      // Récupérer les caméras disponibles
+      const devices = await Html5Qrcode.getCameras();
+      
+      if (devices && devices.length > 0) {
+        setCameras(devices);
+        // Préférer la caméra arrière (environment)
+        const backCamera = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('arrière'));
+        const cameraId = backCamera?.id || devices[0].id;
+        setCurrentCamera(cameraId);
+        setHasCamera(true);
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: constraints,
-      });
+        // Configuration du scanner
+        const config = {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+        };
 
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute("playsinline", "true");
-        videoRef.current.play();
+        await scannerRef.current.start(
+          cameraId,
+          config,
+          onScanSuccess,
+          onScanFailure
+        );
+        
+        setIsScanning(true);
+      } else {
+        setHasCamera(false);
       }
-      setHasCamera(true);
-      setIsScanning(true);
-      scanQRCode();
     } catch (err) {
-      console.error("Erreur caméra:", err);
+      console.error("Erreur démarrage scanner:", err);
       setHasCamera(false);
-    } finally {
-      setIsCameraLoading(false);
     }
   };
 
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    setIsScanning(false);
-  };
-
-  const toggleTorch = async () => {
-    if (streamRef.current) {
-      const videoTrack = streamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        try {
-          const capabilities = videoTrack.getCapabilities();
-          if ('torch' in capabilities) {
-            await videoTrack.applyConstraints({
-              advanced: [{ torch: !torchEnabled } as any],
-            });
-            setTorchEnabled(!torchEnabled);
-          } else {
-            console.warn("Torche non supportée sur cet appareil");
-          }
-        } catch (err) {
-          console.error("Erreur torche:", err);
-        }
-      }
-    }
-  };
-
-  const switchCamera = () => {
-    stopCamera();
-    setFacingMode(facingMode === "environment" ? "user" : "environment");
-  };
-
-  const scanQRCode = () => {
-    if (!isScanning) return;
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-
-    if (!video || !canvas) {
-      scanIntervalRef.current = requestAnimationFrame(scanQRCode);
-      return;
-    }
-
-    if (typeof jsQR !== 'function') {
-      scanIntervalRef.current = requestAnimationFrame(scanQRCode);
-      return;
-    }
-
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) {
-      scanIntervalRef.current = requestAnimationFrame(scanQRCode);
-      return;
-    }
-
-    if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
+  const stopScanner = async () => {
+    if (scannerRef.current && isScanning) {
       try {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "attemptBoth",
-        });
-
-        if (code && code.data) {
-          console.log('QR Code détecté:', code.data);
-          setQrCode(code.data);
-          if (code.data === roundSite?.site?.qrCode) {
-            setQrValidated(true);
-            setError(null);
-          } else {
-            setQrValidated(false);
-            setError("QR code invalide pour ce site");
-          }
-          stopCamera();
-          return;
-        }
+        await scannerRef.current.stop();
+        setIsScanning(false);
       } catch (err) {
-        console.error('Erreur décodage QR:', err);
+        console.error("Erreur arrêt scanner:", err);
       }
     }
+  };
 
-    scanIntervalRef.current = requestAnimationFrame(scanQRCode);
+  const onScanSuccess = (decodedText: string) => {
+    console.log('QR Code scanné:', decodedText);
+    setQrCode(decodedText);
+    
+    // Validation automatique
+    if (decodedText === roundSite?.site?.qrCode) {
+      setQrValidated(true);
+      setError(null);
+      // Arrêter le scanner après un scan réussi
+      stopScanner();
+    } else {
+      setQrValidated(false);
+      setError("QR code invalide pour ce site");
+    }
+  };
+
+  const onScanFailure = (error: string) => {
+    // Ignorer les erreurs silencieusement pendant le scan
+    // console.warn('Scan error:', error);
+  };
+
+  const switchCamera = async () => {
+    if (cameras.length < 2) return;
+    
+    const currentIndex = cameras.findIndex(c => c.id === currentCamera);
+    const nextIndex = (currentIndex + 1) % cameras.length;
+    const nextCamera = cameras[nextIndex].id;
+    
+    await stopScanner();
+    setCurrentCamera(nextCamera);
+    
+    // Redémarrer avec la nouvelle caméra
+    setTimeout(() => {
+      if (scannerRef.current) {
+        scannerRef.current.start(
+          nextCamera,
+          { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+          onScanSuccess,
+          onScanFailure
+        ).then(() => setIsScanning(true));
+      }
+    }, 500);
   };
 
   const validateQrCode = () => {
@@ -309,13 +265,6 @@ export default function ControllerVisitPage() {
 
   // ============================================================
   // ÉTAPE 4 : PHOTO
-  // ============================================================
-  const capturePhoto = async () => {
-    // À implémenter
-  };
-
-  // ============================================================
-  // ÉTAPE 5 : STATUT DE PRÉSENCE
   // ============================================================
   const presenceOptions = [
     {
@@ -486,64 +435,30 @@ export default function ControllerVisitPage() {
             {/* Scanner de QR code */}
             {hasCamera ? (
               <div className="space-y-3">
-                <div className="relative bg-black rounded-lg overflow-hidden" style={{ minHeight: "300px" }}>
-                  {isCameraLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-10">
-                      <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-white" />
-                    </div>
-                  )}
-                  
-                  <video
-                    ref={videoRef}
-                    className="w-full h-full object-cover"
-                    style={{ display: isCameraLoading ? "none" : "block" }}
-                    playsInline
-                    muted
-                  />
-                  
-                  <canvas ref={canvasRef} className="hidden" />
-                  
-                  {/* Zone de scan */}
-                  <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute inset-0 border-2 border-indigo-500 m-8 rounded-lg opacity-50" />
-                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-indigo-500 animate-pulse" />
-                  </div>
-                  
-                  {/* Indicateur de scan */}
-                  {isScanning && (
-                    <div className="absolute bottom-4 left-0 right-0 text-center">
-                      <span className="bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-sm">
-                        <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
-                        Recherche de QR code...
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-center space-x-4">
-                  <button
-                    onClick={switchCamera}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                    title="Changer de caméra"
-                  >
-                    <FontAwesomeIcon icon={faRotate} />
-                  </button>
-                  <button
-                    onClick={toggleTorch}
-                    className={`px-4 py-2 rounded-lg ${
-                      torchEnabled 
-                        ? "bg-yellow-500 text-white hover:bg-yellow-600" 
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                    title="Torche"
-                  >
-                    <FontAwesomeIcon icon={faLightbulb} />
-                  </button>
-                </div>
+                <div 
+                  id={scannerContainerId}
+                  className="w-full rounded-lg overflow-hidden"
+                  style={{ minHeight: "300px" }}
+                />
                 
-                <p className="text-xs text-gray-500 text-center">
-                  Placez le QR code dans le cadre pour le scanner automatiquement
-                </p>
+                {cameras.length > 1 && (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={switchCamera}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                    >
+                      <FontAwesomeIcon icon={faRotate} className="mr-2" />
+                      Changer de caméra
+                    </button>
+                  </div>
+                )}
+                
+                {isScanning && (
+                  <p className="text-xs text-gray-500 text-center">
+                    <FontAwesomeIcon icon={faSpinner} spin className="mr-1" />
+                    Recherche de QR code...
+                  </p>
+                )}
               </div>
             ) : (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
@@ -555,7 +470,7 @@ export default function ControllerVisitPage() {
               </div>
             )}
 
-            {/* Option de saisie manuelle (toujours visible) */}
+            {/* Option de saisie manuelle */}
             <div className="mt-4 p-4 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-700 mb-2">
                 Ou saisissez le code manuellement :
@@ -595,7 +510,7 @@ export default function ControllerVisitPage() {
             <div className="flex justify-between pt-4">
               <button
                 onClick={() => {
-                  stopCamera();
+                  stopScanner();
                   setCurrentStep("geoloc");
                 }}
                 className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
@@ -605,7 +520,7 @@ export default function ControllerVisitPage() {
               {qrValidated && (
                 <button
                   onClick={() => {
-                    stopCamera();
+                    stopScanner();
                     setCurrentStep("pin");
                   }}
                   className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
