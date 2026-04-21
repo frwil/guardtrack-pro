@@ -7,6 +7,7 @@ import {
   imageAnalysisEnhancedService,
   EnhancedAnalysisResult,
 } from "../../../../../../../../src/services/ai/imageAnalysisEnhanced";
+import { useAuthStore } from "../../../../../../../../src/stores/authStore";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faLocationDot,
@@ -46,6 +47,9 @@ export default function ControllerVisitPage() {
   const router = useRouter();
   const roundId = parseInt(params.id as string);
   const siteId = parseInt(params.siteId as string);
+
+  // Store d'authentification
+  const { user, loginWithPin, error: authError } = useAuthStore();
 
   const [currentStep, setCurrentStep] = useState<Step>("geoloc");
   const [roundSite, setRoundSite] = useState<any>(null);
@@ -108,9 +112,13 @@ export default function ControllerVisitPage() {
   };
 
   const loadRoundSite = async () => {
-    const round = await roundsService.getById(roundId);
-    const site = round?.sites?.find((s: any) => s.site?.id === siteId);
-    setRoundSite(site);
+    try {
+      const round = await roundsService.getById(roundId);
+      const site = round?.sites?.find((s: any) => s.site?.id === siteId);
+      setRoundSite(site);
+    } catch (error) {
+      console.error("Erreur chargement ronde:", error);
+    }
   };
 
   // ============================================================
@@ -132,7 +140,7 @@ export default function ControllerVisitPage() {
           position.coords.latitude,
           position.coords.longitude,
           siteLat,
-          siteLon,
+          siteLon
         );
 
         setGeolocation({
@@ -149,7 +157,7 @@ export default function ControllerVisitPage() {
         console.error("Erreur GPS:", error);
         setGeolocation(null);
         setIsLoading(false);
-      },
+      }
     );
   };
 
@@ -157,7 +165,7 @@ export default function ControllerVisitPage() {
     lat1: number,
     lon1: number,
     lat2: number,
-    lon2: number,
+    lon2: number
   ): number => {
     const R = 6371000;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -195,7 +203,7 @@ export default function ControllerVisitPage() {
           (d) =>
             d.label.toLowerCase().includes("back") ||
             d.label.toLowerCase().includes("arrière") ||
-            d.label.toLowerCase().includes("environment"),
+            d.label.toLowerCase().includes("environment")
         );
         const cameraId = backCamera?.id || devices[0].id;
         setCurrentCamera(cameraId);
@@ -211,7 +219,7 @@ export default function ControllerVisitPage() {
           cameraId,
           config,
           onScanSuccess,
-          onScanFailure,
+          onScanFailure
         );
 
         setIsScanning(true);
@@ -258,7 +266,7 @@ export default function ControllerVisitPage() {
     } catch (err) {
       setQrValidated(false);
       setError(
-        "Format de QR code invalide. Assurez-vous de scanner le QR code affiché sur le site.",
+        "Format de QR code invalide. Assurez-vous de scanner le QR code affiché sur le site."
       );
     }
   };
@@ -284,7 +292,7 @@ export default function ControllerVisitPage() {
             nextCamera,
             { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
             onScanSuccess,
-            onScanFailure,
+            onScanFailure
           )
           .then(() => setIsScanning(true));
       }
@@ -292,7 +300,7 @@ export default function ControllerVisitPage() {
   };
 
   // ============================================================
-  // ÉTAPE 3 : CODE PIN (avec vérification)
+  // ÉTAPE 3 : CODE PIN (avec vérification via authStore)
   // ============================================================
   const verifyPin = async () => {
     if (pinCode.length !== 5) {
@@ -300,33 +308,27 @@ export default function ControllerVisitPage() {
       return;
     }
 
+    if (!user?.email) {
+      setError("Session expirée. Veuillez vous reconnecter.");
+      return;
+    }
+
     setIsVerifyingPin(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/verify-pin`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify({ pin: pinCode }),
-        },
-      );
+      const success = await loginWithPin(user.email, pinCode);
 
-      const data = await response.json();
-
-      if (response.ok && data.valid) {
+      if (success) {
         setCurrentStep("photo");
       } else {
-        setError("Code PIN incorrect");
+        setError(authError || "Code PIN incorrect");
         setPinCode("");
       }
     } catch (error) {
       console.error("Erreur vérification PIN:", error);
       setError("Erreur lors de la vérification du PIN");
+      setPinCode("");
     } finally {
       setIsVerifyingPin(false);
     }
@@ -406,7 +408,7 @@ export default function ControllerVisitPage() {
           context: "controller_visit",
           expectedPersonCount: 2,
           checkUniform: true,
-        },
+        }
       );
       setPhotoAnalysis(analysis);
       setAiProvider(analysis.provider);
@@ -876,7 +878,7 @@ export default function ControllerVisitPage() {
                               {remark}
                             </li>
                           );
-                        },
+                        }
                       )}
                     </ul>
 
