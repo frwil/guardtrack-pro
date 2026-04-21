@@ -70,19 +70,23 @@ export default function ControllerVisitPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [hasCamera, setHasCamera] = useState(true);
   const [torchEnabled, setTorchEnabled] = useState(false);
-  const [facingMode, setFacingMode] = useState<"environment" | "user">(
-    "environment",
-  );
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [isCameraLoading, setIsCameraLoading] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<any>(null);
 
   useEffect(() => {
     loadRoundSite();
+    
     // Charger jsQR dynamiquement
-    import("jsqr").then((module) => {
-      jsQR = module.default;
-    });
+    import("jsqr")
+      .then((module) => {
+        jsQR = module.default;
+        console.log('✅ jsQR chargé avec succès');
+      })
+      .catch((err) => {
+        console.error('❌ Erreur chargement jsQR:', err);
+      });
 
     return () => {
       stopCamera();
@@ -102,7 +106,7 @@ export default function ControllerVisitPage() {
 
   const loadRoundSite = async () => {
     const round = await roundsService.getById(roundId);
-    const site = round?.sites?.find((s: any) => s.id === siteId);
+    const site = round?.sites?.find((s: any) => s.site?.id === siteId);
     setRoundSite(site);
   };
 
@@ -133,8 +137,7 @@ export default function ControllerVisitPage() {
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
           distance,
-          withinGeofence:
-            distance <= (roundSite?.site?.geofencingRadius || 100),
+          withinGeofence: distance <= (roundSite?.site?.geofencingRadius || 100),
         });
         setIsLoading(false);
       },
@@ -209,9 +212,8 @@ export default function ControllerVisitPage() {
       const videoTrack = streamRef.current.getVideoTracks()[0];
       if (videoTrack) {
         try {
-          // Vérifier si la torche est supportée
           const capabilities = videoTrack.getCapabilities();
-          if ("torch" in capabilities) {
+          if ('torch' in capabilities) {
             await videoTrack.applyConstraints({
               advanced: [{ torch: !torchEnabled } as any],
             });
@@ -225,6 +227,7 @@ export default function ControllerVisitPage() {
       }
     }
   };
+
   const switchCamera = () => {
     stopCamera();
     setFacingMode(facingMode === "environment" ? "user" : "environment");
@@ -236,38 +239,48 @@ export default function ControllerVisitPage() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    if (!video || !canvas || !jsQR) {
+    if (!video || !canvas) {
       scanIntervalRef.current = requestAnimationFrame(scanQRCode);
       return;
     }
 
-    const ctx = canvas.getContext("2d");
+    if (typeof jsQR !== 'function') {
+      scanIntervalRef.current = requestAnimationFrame(scanQRCode);
+      return;
+    }
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) {
       scanIntervalRef.current = requestAnimationFrame(scanQRCode);
       return;
     }
 
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "dontInvert",
-      });
+      try {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "attemptBoth",
+        });
 
-      if (code) {
-        setQrCode(code.data);
-        // Validation automatique
-        if (code.data === roundSite?.site?.qrCode) {
-          setQrValidated(true);
-          setError(null);
-        } else {
-          setError("QR code invalide pour ce site");
+        if (code && code.data) {
+          console.log('QR Code détecté:', code.data);
+          setQrCode(code.data);
+          if (code.data === roundSite?.site?.qrCode) {
+            setQrValidated(true);
+            setError(null);
+          } else {
+            setQrValidated(false);
+            setError("QR code invalide pour ce site");
+          }
+          stopCamera();
+          return;
         }
-        stopCamera();
-        return;
+      } catch (err) {
+        console.error('Erreur décodage QR:', err);
       }
     }
 
@@ -473,33 +486,38 @@ export default function ControllerVisitPage() {
             {/* Scanner de QR code */}
             {hasCamera ? (
               <div className="space-y-3">
-                <div
-                  className="relative bg-black rounded-lg overflow-hidden"
-                  style={{ minHeight: "300px" }}
-                >
+                <div className="relative bg-black rounded-lg overflow-hidden" style={{ minHeight: "300px" }}>
                   {isCameraLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-                      <FontAwesomeIcon
-                        icon={faSpinner}
-                        spin
-                        className="text-3xl text-white"
-                      />
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-10">
+                      <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-white" />
                     </div>
                   )}
-
+                  
                   <video
                     ref={videoRef}
-                    className="w-full"
+                    className="w-full h-full object-cover"
                     style={{ display: isCameraLoading ? "none" : "block" }}
+                    playsInline
+                    muted
                   />
-
+                  
                   <canvas ref={canvasRef} className="hidden" />
-
+                  
                   {/* Zone de scan */}
                   <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute inset-0 border-2 border-indigo-500 m-8 rounded-lg opacity-50" />
                     <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-indigo-500 animate-pulse" />
                   </div>
+                  
+                  {/* Indicateur de scan */}
+                  {isScanning && (
+                    <div className="absolute bottom-4 left-0 right-0 text-center">
+                      <span className="bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-sm">
+                        <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
+                        Recherche de QR code...
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-center space-x-4">
@@ -513,8 +531,8 @@ export default function ControllerVisitPage() {
                   <button
                     onClick={toggleTorch}
                     className={`px-4 py-2 rounded-lg ${
-                      torchEnabled
-                        ? "bg-yellow-500 text-white hover:bg-yellow-600"
+                      torchEnabled 
+                        ? "bg-yellow-500 text-white hover:bg-yellow-600" 
                         : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                     title="Torche"
@@ -522,63 +540,55 @@ export default function ControllerVisitPage() {
                     <FontAwesomeIcon icon={faLightbulb} />
                   </button>
                 </div>
-
+                
                 <p className="text-xs text-gray-500 text-center">
-                  Placez le QR code dans le cadre pour le scanner
-                  automatiquement
+                  Placez le QR code dans le cadre pour le scanner automatiquement
                 </p>
               </div>
             ) : (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-                <FontAwesomeIcon
-                  icon={faCamera}
-                  className="text-3xl text-yellow-600 mb-2"
-                />
+                <FontAwesomeIcon icon={faCamera} className="text-3xl text-yellow-600 mb-2" />
                 <p className="text-yellow-800">Caméra non disponible</p>
                 <p className="text-sm text-yellow-600 mt-1">
-                  Veuillez utiliser la saisie manuelle
+                  Veuillez utiliser la saisie manuelle ci-dessous
                 </p>
               </div>
             )}
 
+            {/* Option de saisie manuelle (toujours visible) */}
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                Ou saisissez le code manuellement :
+              </p>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={qrCode}
+                  onChange={(e) => setQrCode(e.target.value)}
+                  placeholder="Ex: SITE-12345"
+                  className="flex-1 px-4 py-2 border rounded-lg"
+                />
+                <button
+                  onClick={validateQrCode}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                >
+                  Valider
+                </button>
+              </div>
+            </div>
+
             {/* Affichage du QR code scanné */}
             {qrCode && (
-              <div
-                className={`p-3 rounded-lg ${qrValidated ? "bg-green-50 border border-green-200" : "bg-yellow-50 border border-yellow-200"}`}
-              >
-                <p className="text-sm text-gray-600">QR Code scanné :</p>
+              <div className={`p-3 rounded-lg ${qrValidated ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+                <p className="text-sm text-gray-600">Code détecté :</p>
                 <p className="font-mono text-sm break-all">{qrCode}</p>
                 {qrValidated ? (
-                  <p className="text-green-600 text-sm mt-1">
-                    ✅ QR Code valide
-                  </p>
+                  <p className="text-green-600 text-sm mt-1">✅ QR Code valide</p>
                 ) : (
-                  <p className="text-yellow-600 text-sm mt-1">
-                    ⚠️ QR Code non valide pour ce site
-                  </p>
+                  <p className="text-yellow-600 text-sm mt-1">⚠️ QR Code non valide pour ce site</p>
                 )}
               </div>
             )}
-
-            {/* Option de saisie manuelle */}
-            <details className="mt-4">
-              <summary className="text-sm text-gray-500 cursor-pointer">
-                Saisie manuelle du QR code
-              </summary>
-              <input
-                type="text"
-                value={qrCode}
-                onChange={(e) => setQrCode(e.target.value)}
-                placeholder="Ou entrez le code manuellement"
-                className="w-full px-4 py-2 border rounded-lg mt-2"
-              />
-              <button
-                onClick={validateQrCode}
-                className="mt-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-              >
-                Valider le code saisi
-              </button>
-            </details>
 
             {error && <p className="text-red-600 text-sm">{error}</p>}
 
@@ -600,8 +610,7 @@ export default function ControllerVisitPage() {
                   }}
                   className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
-                  Continuer{" "}
-                  <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
+                  Continuer <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
                 </button>
               )}
             </div>

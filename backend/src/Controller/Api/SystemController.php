@@ -11,12 +11,18 @@ class SystemController extends AbstractController
     #[Route('/api/ping', name: 'api_ping', methods: ['GET'])]
     public function ping(): JsonResponse
     {
-        return $this->json([
+
+        $response = $this->json([
             'status' => 'ok',
             'message' => 'GuardTrack Pro API',
             'version' => '1.0.0',
             'timestamp' => (new \DateTime())->format('c'),
         ]);
+        $response->headers->set('Access-Control-Allow-Origin', '*');
+        $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With');
+
+        return $response;
     }
 
     #[Route('/api/test', name: 'api_test', methods: ['GET'])]
@@ -32,7 +38,7 @@ class SystemController extends AbstractController
     public function getServerTime(): JsonResponse
     {
         $now = new \DateTimeImmutable();
-        
+
         return $this->json([
             'timestamp' => $now->getTimestamp(),
             'iso' => $now->format('c'),
