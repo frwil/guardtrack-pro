@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { config } from '@fortawesome/fontawesome-svg-core';
 import '@fortawesome/fontawesome-svg-core/styles.css';
 import { ServiceWorkerRegistration } from '../src/components/ServiceWorkerRegistration';
+import 'leaflet/dist/leaflet.css';
 
 // Empêcher l'insertion automatique du CSS
 config.autoAddCss = false;

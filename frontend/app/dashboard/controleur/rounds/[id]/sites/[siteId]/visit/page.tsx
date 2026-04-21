@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { roundsService } from "../../../../../../../src/services/api/rounds";
+import { roundsService } from "../../../../../../../../src/services/api/rounds";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faLocationDot,
