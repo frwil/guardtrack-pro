@@ -37,29 +37,99 @@ export default function ControleurAgentsPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [agentsList] = await Promise.all([
-        usersService.getAgents(),
-      ]);
-
+      console.log('🔍 ========== DÉBUT CHARGEMENT AGENTS ==========');
+      
+      // 1. Récupérer les agents
+      const agentsList = await usersService.getAgents();
+      console.log('📋 [1] Agents récupérés:', agentsList.length);
+      console.log('📋 [1] Liste des agents:', agentsList.map(a => ({ id: a.id, name: a.fullName, email: a.email })));
+      
       setAgents(agentsList);
 
-      // Charger les présences du jour pour chaque agent
+      // 2. Récupérer les présences du jour
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      console.log('📅 [2] Date du jour:', todayStr);
+      console.log('📅 [2] Date complète:', today.toString());
+      console.log('📅 [2] ISO String:', today.toISOString());
+      
       const presencesMap: Record<number, any> = {};
-      await Promise.all(
-        agentsList.map(async (agent) => {
-          try {
-            const presences = await presencesService.list({ agentId: agent.id, date: new Date().toISOString().split('T')[0] });
-            presencesMap[agent.id] = presences[0] || null;
-          } catch (error) {
-            console.error(`Erreur présences pour ${agent.id}:`, error);
+      
+      // 2a. Tester l'appel API pour CHAQUE agent
+      console.log('🔄 [3] Début des appels API pour chaque agent...');
+      
+      let successCount = 0;
+      let errorCount = 0;
+      let emptyCount = 0;
+      
+      for (const agent of agentsList) {
+        try {
+          const url = `${process.env.NEXT_PUBLIC_API_URL}/api/presences?agentId=${agent.id}&date=${todayStr}`;
+          console.log(`🔗 [${agent.id}] URL appelée:`, url);
+          
+          // Appel direct fetch pour voir la réponse brute
+          const token = localStorage.getItem('token');
+          const response = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          const status = response.status;
+          const data = await response.json();
+          
+          console.log(`📡 [${agent.id}] Status HTTP:`, status);
+          console.log(`📡 [${agent.id}] Réponse brute:`, data);
+          console.log(`📡 [${agent.id}] Nombre d'éléments:`, Array.isArray(data) ? data.length : 'N/A');
+          
+          if (Array.isArray(data) && data.length > 0) {
+            console.log(`✅ [${agent.id}] Agent ${agent.fullName} a ${data.length} présence(s)`);
+            data.forEach((p: any, i: number) => {
+              console.log(`   Présence ${i+1}:`, {
+                id: p.id,
+                checkIn: p.checkIn,
+                status: p.status,
+                site: p.site?.name,
+                agent: p.agent
+              });
+            });
+            presencesMap[agent.id] = data[0];
+            successCount++;
+          } else {
+            console.log(`❌ [${agent.id}] Agent ${agent.fullName} n'a PAS de présence pour aujourd'hui`);
+            emptyCount++;
           }
-        })
-      );
+          
+          // Via le service (pour comparaison)
+          const presencesViaService = await presencesService.list({ 
+            agentId: agent.id, 
+            date: todayStr 
+          });
+          console.log(`📦 [${agent.id}] Via service:`, presencesViaService.length, 'présence(s)');
+          
+        } catch (error) {
+          console.error(`💥 [${agent.id}] Erreur pour agent ${agent.fullName}:`, error);
+          errorCount++;
+        }
+      }
+      
+      console.log('📊 ========== RÉSUMÉ ==========');
+      console.log(`✅ Succès avec présence: ${successCount}`);
+      console.log(`❌ Succès sans présence: ${emptyCount}`);
+      console.log(`💥 Erreurs: ${errorCount}`);
+      console.log(`📊 Total agents: ${agentsList.length}`);
+      
+      console.log('📊 Presences map finale:', presencesMap);
+      console.log('📊 Agents avec présence:', Object.keys(presencesMap).length);
+      
       setTodayPresences(presencesMap);
+      
     } catch (error) {
-      console.error('Erreur de chargement:', error);
+      console.error('💥 Erreur globale de chargement:', error);
     } finally {
       setIsLoading(false);
+      console.log('🔍 ========== FIN CHARGEMENT ==========');
     }
   };
 
@@ -74,7 +144,10 @@ export default function ControleurAgentsPage() {
     }
 
     if (filter === 'present') {
-      filtered = filtered.filter(a => todayPresences[a.id]?.status === 'VALIDATED' || todayPresences[a.id]?.status === 'PENDING');
+      filtered = filtered.filter(a => {
+        const presence = todayPresences[a.id];
+        return presence && (presence.status === 'VALIDATED' || presence.status === 'PENDING');
+      });
     } else if (filter === 'absent') {
       filtered = filtered.filter(a => !todayPresences[a.id]);
     }
@@ -121,7 +194,10 @@ export default function ControleurAgentsPage() {
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-sm text-gray-500">Présents aujourd'hui</p>
           <p className="text-2xl font-bold text-green-600">
-            {agents.filter(a => todayPresences[a.id]?.status === 'VALIDATED' || todayPresences[a.id]?.status === 'PENDING').length}
+            {agents.filter(a => {
+              const p = todayPresences[a.id];
+              return p && (p.status === 'VALIDATED' || p.status === 'PENDING');
+            }).length}
           </p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">

@@ -60,7 +60,7 @@ class UserController extends AbstractController
 
     // GET /api/users/agents - Liste des agents actifs
     #[Route('/agents', name: 'api_users_agents', methods: ['GET'])]
-    #[IsGranted('ROLE_SUPERVISEUR')]
+    #[IsGranted('ROLE_CONTROLEUR')]
     public function agents(): JsonResponse
     {
         $agents = $this->userRepository->findActiveAgents();
