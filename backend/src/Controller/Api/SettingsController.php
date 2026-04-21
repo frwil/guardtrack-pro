@@ -296,44 +296,28 @@ class SettingsController extends AbstractController
         if (empty($apiKey)) return false;
 
         try {
-            // Endpoint officiel selon la documentation Z.AI
+            // Test simple avec l'API REST
             $ch = curl_init('https://api.z.ai/api/paas/v4/chat/completions');
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'Authorization: Bearer ' . $apiKey,
-                'Content-Type: application/json',
-                'Accept-Language: en-US,en'
+                'Content-Type: application/json'
             ]);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-                'model' => 'glm-4-flash', // Modèle rapide pour test
-                'messages' => [
-                    [
-                        'role' => 'user',
-                        'content' => 'test'
-                    ]
-                ],
-                'max_tokens' => 1 // Minimum pour économiser
+                'model' => 'glm-4-flash',
+                'messages' => [['role' => 'user', 'content' => 'test']],
+                'max_tokens' => 1
             ]));
             curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $error = curl_error($ch);
             curl_close($ch);
 
-            // Log pour déboguer
-            error_log("Z.AI Test - HTTP Code: " . $httpCode);
-            if ($error) {
-                error_log("Z.AI Test - CURL Error: " . $error);
-            } else {
-                error_log("Z.AI Test - Response: " . substr($response, 0, 200));
-            }
-
-            // 200 = succès, 401 = clé invalide mais API accessible
+            // 200 = succès, 401 = clé invalide (mais API accessible)
             return $httpCode === 200 || $httpCode === 401;
         } catch (\Exception $e) {
-            error_log("Z.AI Test - Exception: " . $e->getMessage());
             return false;
         }
     }

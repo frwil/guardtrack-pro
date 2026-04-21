@@ -31,9 +31,12 @@ export interface UnifiedAnalysisResult {
   processingTime: number;
 }
 
+export type AnalysisContext = 'agent_checkin' | 'controller_visit';
+
 class ImageAnalysisService {
   private currentProvider: string = "lightweight";
   private settings: any = null;
+  private currentContext: AnalysisContext = 'agent_checkin'; // ✅ Ajouté
 
   async initialize(): Promise<void> {
     try {
@@ -45,6 +48,13 @@ class ImageAnalysisService {
       );
       this.currentProvider = "lightweight";
     }
+  }
+
+  /**
+   * ✅ Définir le contexte d'analyse
+   */
+  setContext(context: AnalysisContext): void {
+    this.currentContext = context;
   }
 
   async analyzeImage(imageData: string): Promise<UnifiedAnalysisResult> {
@@ -116,12 +126,11 @@ class ImageAnalysisService {
   ): Promise<UnifiedAnalysisResult> {
     const result = await lightweightAnalyzer.analyzeImage(imageData);
 
-    // Convertir LightweightAnalysisResult en UnifiedAnalysisResult
     return {
       personCount: result.personCount,
       hasUniform: result.hasUniform,
       uniformConfidence: result.uniformConfidence,
-      objects: [], // Lightweight ne détecte pas d'objets spécifiques
+      objects: [],
       quality: {
         brightness: result.brightness,
         blur: result.blur,
@@ -134,101 +143,50 @@ class ImageAnalysisService {
     };
   }
 
-  private async analyzeWithZAI(
-    imageData: string,
-  ): Promise<UnifiedAnalysisResult> {
-    const provider = this.settings?.ai?.providers?.find(
-      (p: any) => p.id === "zai",
-    );
-
-    if (!provider?.apiKey) {
-      console.warn("Z.AI API key non configurée, fallback vers lightweight");
+  private async analyzeWithZAI(imageData: string): Promise<UnifiedAnalysisResult> {
+    const provider = this.settings?.ai?.providers?.find((p: any) => p.id === 'zai');
+    
+    if (!provider?.enabled) {
+      console.warn('Z.AI non activé, fallback vers lightweight');
       return this.analyzeWithLightweight(imageData);
     }
 
     try {
-      const base64Image = imageData.split(",")[1];
-
-      // ✅ Endpoint officiel Z.AI
-      const response = await fetch(
-        "https://api.z.ai/api/paas/v4/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${provider.apiKey}`,
-            "Accept-Language": "en-US,en",
-          },
-          body: JSON.stringify({
-            model: provider.model || "glm-4v-plus", // Modèle vision
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "Analyze this security guard photo. Return a JSON with: personCount (number), hasUniform (boolean), uniformConfidence (0-1), remarks (array of strings). Check if the person is wearing a security uniform (dark blue/black, badge, tactical vest).",
-                  },
-                  {
-                    type: "image_url",
-                    image_url: {
-                      url: `data:image/jpeg;base64,${base64Image}`,
-                    },
-                  },
-                ],
-              },
-            ],
-            max_tokens: 500,
-            temperature: 0.1,
-          }),
-        },
-      );
+      // Appeler l'API Route Next.js
+      const response = await fetch('/api/ai/analyze-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageData,
+          context: this.currentContext, // ✅ Utilise le contexte actuel
+        }),
+      });
 
       if (!response.ok) {
-        throw new Error(`Z.AI API error: ${response.status}`);
+        const error = await response.json();
+        throw new Error(error.error || 'Z.AI API error');
       }
 
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-
-      // Parser la réponse JSON
-      let result;
-      try {
-        result = JSON.parse(content || "{}");
-      } catch {
-        // Fallback si le JSON n'est pas valide
-        result = {
-          personCount: 1,
-          hasUniform: content?.toLowerCase().includes("uniform") || false,
-          uniformConfidence: 0.7,
-          remarks: [content?.substring(0, 100) || "Analyse Z.AI"],
-        };
-      }
-
-      const remarks: string[] = result.remarks || [];
-      remarks.push("🤖 Analyse par Z.AI (GLM-4V)");
-
+      const result = await response.json();
+      
       return {
         personCount: result.personCount || 1,
         hasUniform: result.hasUniform || false,
         uniformConfidence: result.uniformConfidence || 0.8,
         objects: result.objects || [],
+        faces: result.faces || result.personCount,
         quality: {
           brightness: result.quality?.brightness ?? 0.5,
           blur: result.quality?.blur ?? 0.7,
           isAcceptable: result.quality?.isAcceptable !== false,
         },
-        remarks,
-        suspicionScore: this.calculateSuspicionScore(
-          result.personCount || 1,
-          result.hasUniform || false,
-          result.quality,
-        ),
-        provider: "zai",
+        remarks: result.remarks || [],
+        suspicionScore: result.suspicionScore || 30,
+        provider: 'zai',
         processingTime: 0,
       };
     } catch (error) {
-      console.error("Erreur Z.AI:", error);
+      console.error('Erreur Z.AI:', error);
       return this.analyzeWithLightweight(imageData);
     }
   }
@@ -261,7 +219,9 @@ class ImageAnalysisService {
                 content: [
                   {
                     type: "text",
-                    text: "Analyze this image. Return a JSON with: personCount (number), hasUniform (boolean), confidence (0-1), remarks (array of strings).",
+                    text: this.currentContext === 'controller_visit'
+                      ? "Analyze this security inspection photo. The photo should show 2 people (agent and controller). Check if the agent is wearing a security uniform. Return JSON with: personCount, hasUniform, confidence (0-1), remarks (array)."
+                      : "Analyze this security agent check-in photo. The photo should show 1 person (the agent). Check if wearing security uniform. Return JSON with: personCount, hasUniform, confidence (0-1), remarks (array).",
                   },
                   {
                     type: "image_url",
@@ -409,7 +369,10 @@ class ImageAnalysisService {
             Authorization: `Bearer ${provider.apiKey}`,
           }),
         },
-        body: JSON.stringify({ image: imageData }),
+        body: JSON.stringify({ 
+          image: imageData,
+          context: this.currentContext 
+        }),
       });
 
       const data = await response.json();

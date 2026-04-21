@@ -33,6 +33,7 @@ class ImageAnalysisEnhancedService {
     imageData: string,
     options: EnhancedAnalysisOptions
   ): Promise<EnhancedAnalysisResult> {
+    imageAnalysisService.setContext(options.context);
     // Analyse de base via le service existant
     const baseResult = await imageAnalysisService.analyzeImage(imageData);
     
