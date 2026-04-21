@@ -17,8 +17,6 @@ import {
   faArrowLeft,
   faSpinner,
   faRotate,
-  faLightbulb,
-  faStop,
 } from "@fortawesome/free-solid-svg-icons";
 import { Html5Qrcode } from "html5-qrcode";
 
@@ -65,9 +63,6 @@ export default function ControllerVisitPage() {
 
   useEffect(() => {
     loadRoundSite();
-    
-    // Initialiser le scanner
-    scannerRef.current = new Html5Qrcode(scannerContainerId);
 
     return () => {
       stopScanner();
@@ -76,7 +71,12 @@ export default function ControllerVisitPage() {
 
   useEffect(() => {
     if (currentStep === "qr") {
-      startScanner();
+      // Attendre que le DOM soit prêt avant d'initialiser le scanner
+      const timer = setTimeout(() => {
+        startScanner();
+      }, 300);
+      
+      return () => clearTimeout(timer);
     } else {
       stopScanner();
     }
@@ -150,21 +150,32 @@ export default function ControllerVisitPage() {
   // ÉTAPE 2 : SCAN QR CODE (html5-qrcode)
   // ============================================================
   const startScanner = async () => {
-    if (!scannerRef.current) return;
+    // Vérifier que l'élément existe
+    const element = document.getElementById(scannerContainerId);
+    if (!element) {
+      console.warn("Élément scanner non trouvé, nouvelle tentative...");
+      return;
+    }
+
+    if (!scannerRef.current) {
+      scannerRef.current = new Html5Qrcode(scannerContainerId);
+    }
 
     try {
-      // Récupérer les caméras disponibles
       const devices = await Html5Qrcode.getCameras();
       
       if (devices && devices.length > 0) {
         setCameras(devices);
-        // Préférer la caméra arrière (environment)
-        const backCamera = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('arrière'));
+        // Préférer la caméra arrière
+        const backCamera = devices.find(d => 
+          d.label.toLowerCase().includes('back') || 
+          d.label.toLowerCase().includes('arrière') ||
+          d.label.toLowerCase().includes('environment')
+        );
         const cameraId = backCamera?.id || devices[0].id;
         setCurrentCamera(cameraId);
         setHasCamera(true);
 
-        // Configuration du scanner
         const config = {
           fps: 10,
           qrbox: { width: 250, height: 250 },
@@ -287,6 +298,7 @@ export default function ControllerVisitPage() {
     { value: "RETARD", label: "Retard" },
     { value: "ABSENCE_INJUSTIFIEE", label: "Absence injustifiée" },
     { value: "INCONNUE", label: "Raison inconnue" },
+    { value: "AUTRE", label: "Autre" },
   ];
 
   // ============================================================
@@ -437,7 +449,7 @@ export default function ControllerVisitPage() {
               <div className="space-y-3">
                 <div 
                   id={scannerContainerId}
-                  className="w-full rounded-lg overflow-hidden"
+                  className="w-full rounded-lg overflow-hidden bg-black"
                   style={{ minHeight: "300px" }}
                 />
                 
