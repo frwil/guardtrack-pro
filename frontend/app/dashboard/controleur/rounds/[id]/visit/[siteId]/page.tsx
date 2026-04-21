@@ -239,13 +239,13 @@ export default function ControllerVisitPage() {
       } else {
         setQrValidated(false);
         setError(
-          `QR code incorrect. Site attendu: ${siteId}, Site scanné: ${qrData.siteId || "invalide"}`,
+          `QR code incorrect`,
         );
       }
     } catch (err) {
       // Si ce n'est pas du JSON valide
       setQrValidated(false);
-      setError("Format de QR code invalide. Attendu: {siteId: " + siteId + "}");
+      setError("Format de QR code invalide. Assurez-vous de scanner le QR code affiché sur le site.");
     }
   };
 
@@ -506,8 +506,7 @@ export default function ControllerVisitPage() {
               <div
                 className={`p-3 rounded-lg ${qrValidated ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}
               >
-                <p className="text-sm text-gray-600">Code détecté :</p>
-                <p className="font-mono text-sm break-all">{qrCode}</p>
+                
                 {qrValidated ? (
                   <p className="text-green-600 text-sm mt-1">
                     ✅ QR Code valide - Redirection...
