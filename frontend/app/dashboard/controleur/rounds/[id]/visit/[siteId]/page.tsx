@@ -86,7 +86,6 @@ export default function ControllerVisitPage() {
     };
   }, [currentStep]);
 
-  
   const loadRoundSite = async () => {
     const round = await roundsService.getById(roundId);
     const site = round?.sites?.find((s: any) => s.site?.id === siteId);
@@ -221,15 +220,32 @@ export default function ControllerVisitPage() {
     console.log("QR Code scanné:", decodedText);
     setQrCode(decodedText);
 
-    // Validation automatique
-    if (decodedText === roundSite?.site?.qrCode) {
-      setQrValidated(true);
-      setError(null);
-      // Arrêter le scanner après un scan réussi
-      stopScanner();
-    } else {
+    try {
+      // Parser le JSON
+      const qrData = JSON.parse(decodedText);
+
+      // Vérifier que le siteId correspond
+      if (qrData.siteId === siteId) {
+        setQrValidated(true);
+        setError(null);
+
+        // Arrêter le scanner
+        stopScanner();
+
+        // Passer automatiquement à l'étape suivante après un court délai
+        setTimeout(() => {
+          setCurrentStep("pin");
+        }, 800);
+      } else {
+        setQrValidated(false);
+        setError(
+          `QR code incorrect. Site attendu: ${siteId}, Site scanné: ${qrData.siteId || "invalide"}`,
+        );
+      }
+    } catch (err) {
+      // Si ce n'est pas du JSON valide
       setQrValidated(false);
-      setError("QR code invalide pour ce site");
+      setError("Format de QR code invalide. Attendu: {siteId: " + siteId + "}");
     }
   };
 
@@ -261,15 +277,6 @@ export default function ControllerVisitPage() {
           .then(() => setIsScanning(true));
       }
     }, 500);
-  };
-
-  const validateQrCode = () => {
-    if (qrCode === roundSite?.site?.qrCode) {
-      setQrValidated(true);
-      setError(null);
-    } else {
-      setError("QR code invalide pour ce site");
-    }
   };
 
   // ============================================================
@@ -489,47 +496,25 @@ export default function ControllerVisitPage() {
                 />
                 <p className="text-yellow-800">Caméra non disponible</p>
                 <p className="text-sm text-yellow-600 mt-1">
-                  Veuillez utiliser la saisie manuelle ci-dessous
+                  Veuillez vérifier les permissions de la caméra
                 </p>
               </div>
             )}
 
-            {/* Option de saisie manuelle */}
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-700 mb-2">
-                Ou saisissez le code manuellement :
-              </p>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={qrCode}
-                  onChange={(e) => setQrCode(e.target.value)}
-                  placeholder="Ex: SITE-12345"
-                  className="flex-1 px-4 py-2 border rounded-lg"
-                />
-                <button
-                  onClick={validateQrCode}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                >
-                  Valider
-                </button>
-              </div>
-            </div>
-
             {/* Affichage du QR code scanné */}
             {qrCode && (
               <div
-                className={`p-3 rounded-lg ${qrValidated ? "bg-green-50 border border-green-200" : "bg-yellow-50 border border-yellow-200"}`}
+                className={`p-3 rounded-lg ${qrValidated ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}
               >
                 <p className="text-sm text-gray-600">Code détecté :</p>
                 <p className="font-mono text-sm break-all">{qrCode}</p>
                 {qrValidated ? (
                   <p className="text-green-600 text-sm mt-1">
-                    ✅ QR Code valide
+                    ✅ QR Code valide - Redirection...
                   </p>
                 ) : (
-                  <p className="text-yellow-600 text-sm mt-1">
-                    ⚠️ QR Code non valide pour ce site
+                  <p className="text-red-600 text-sm mt-1">
+                    ❌ QR Code invalide pour ce site
                   </p>
                 )}
               </div>
@@ -547,18 +532,7 @@ export default function ControllerVisitPage() {
               >
                 <FontAwesomeIcon icon={faArrowLeft} className="mr-2" /> Retour
               </button>
-              {qrValidated && (
-                <button
-                  onClick={() => {
-                    stopScanner();
-                    setCurrentStep("pin");
-                  }}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                >
-                  Continuer{" "}
-                  <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
-                </button>
-              )}
+              {/* Le bouton Continuer n'est plus nécessaire car la validation est automatique */}
             </div>
           </div>
         )}
