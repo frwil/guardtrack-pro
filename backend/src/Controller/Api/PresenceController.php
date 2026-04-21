@@ -29,25 +29,51 @@ class PresenceController extends AbstractController
     #[IsGranted('ROLE_CONTROLEUR')]
     public function list(Request $request): JsonResponse
     {
-        $criteria = [];
-        $orderBy = ['checkIn' => 'DESC'];
+        $agentId = $request->query->get('agentId');
+        $siteId = $request->query->get('siteId');
+        $status = $request->query->get('status');
+        $date = $request->query->get('date');
+        $limit = $request->query->get('limit', 100);
 
-        if ($agentId = $request->query->get('agentId')) {
-            $criteria['agent'] = $agentId;
+        $queryBuilder = $this->presenceRepository->createQueryBuilder('p')
+            ->leftJoin('p.roundSite', 'rs')
+            ->leftJoin('rs.round', 'r')
+            ->leftJoin('p.agent', 'pa')        // agent directement lié
+            ->leftJoin('r.agent', 'ra')        // agent via la ronde
+            ->addSelect('rs', 'r', 'pa', 'ra');
+
+        // Filtrer par agent (soit directement, soit via la ronde)
+        if ($agentId) {
+            $queryBuilder->andWhere('pa.id = :agentId OR ra.id = :agentId')
+                ->setParameter('agentId', $agentId);
         }
-        if ($siteId = $request->query->get('siteId')) {
-            $criteria['site'] = $siteId;
+
+        // Filtrer par site
+        if ($siteId) {
+            $queryBuilder->andWhere('p.site = :siteId')
+                ->setParameter('siteId', $siteId);
         }
-        if ($status = $request->query->get('status')) {
-            $criteria['status'] = $status;
+
+        // Filtrer par statut
+        if ($status) {
+            $queryBuilder->andWhere('p.status = :status')
+                ->setParameter('status', $status);
         }
-        if ($date = $request->query->get('date')) {
+
+        // Filtrer par date
+        if ($date) {
             $start = new \DateTimeImmutable($date . ' 00:00:00');
             $end = new \DateTimeImmutable($date . ' 23:59:59');
-            $criteria['checkIn'] = ['between', $start, $end];
+            $queryBuilder->andWhere('p.checkIn BETWEEN :start AND :end')
+                ->setParameter('start', $start)
+                ->setParameter('end', $end);
         }
 
-        $presences = $this->presenceRepository->findBy($criteria, $orderBy, $request->query->get('limit', 100));
+        $presences = $queryBuilder
+            ->orderBy('p.checkIn', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
 
         return $this->json(array_map(fn(Presence $p) => $this->formatPresence($p), $presences));
     }
@@ -291,12 +317,15 @@ class PresenceController extends AbstractController
 
     private function formatPresence(Presence $presence, bool $includeDetails = false): array
     {
+        // Récupérer l'agent (soit directement, soit via la ronde)
+        $agent = $presence->getAgent() ?? $presence->getRoundSite()?->getRound()?->getAgent();
+
         $data = [
             'id' => $presence->getId(),
-            'agent' => [
-                'id' => $presence->getAgent()->getId(),
-                'fullName' => $presence->getAgent()->getFullName(),
-            ],
+            'agent' => $agent ? [
+                'id' => $agent->getId(),
+                'fullName' => $agent->getFullName(),
+            ] : null,
             'site' => [
                 'id' => $presence->getSite()->getId(),
                 'name' => $presence->getSite()->getName(),
