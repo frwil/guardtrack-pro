@@ -16,8 +16,7 @@ class SettingsController extends AbstractController
 {
     public function __construct(
         private EntityManagerInterface $entityManager
-    ) {
-    }
+    ) {}
 
     #[Route('', name: 'api_settings_get', methods: ['GET'])]
     // ✅ Pas de restriction - accessible à tous les utilisateurs authentifiés
@@ -25,10 +24,10 @@ class SettingsController extends AbstractController
     public function getSettings(): JsonResponse
     {
         $settings = $this->getDefaultSettings();
-        
+
         // Charger les valeurs depuis la base de données
         $repo = $this->entityManager->getRepository(AppSettings::class);
-        
+
         foreach ($settings as $key => $value) {
             $dbSetting = $repo->findOneBy(['settingKey' => $key]);
             if ($dbSetting) {
@@ -41,7 +40,7 @@ class SettingsController extends AbstractController
         /** @var User|null $user */
         $user = $this->getUser();
         $isAdmin = $user && ($user->isAdmin() || $user->isSuperAdmin());
-        
+
         $response = [
             'company' => [
                 'name' => $settings['company_name'] ?? 'GuardTrack Pro',
@@ -69,7 +68,7 @@ class SettingsController extends AbstractController
                 'unstableThreshold' => (int) ($settings['sync_unstable_threshold'] ?? 3),
             ],
         ];
-        
+
         // ✅ Masquer les clés API pour les non-admins
         if (!$isAdmin) {
             foreach ($response['ai']['providers'] as &$provider) {
@@ -79,7 +78,7 @@ class SettingsController extends AbstractController
                 }
             }
         }
-        
+
         return $this->json($response);
     }
 
@@ -89,7 +88,7 @@ class SettingsController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $repo = $this->entityManager->getRepository(AppSettings::class);
-        
+
         // Mise à jour des paramètres
         $mappings = [
             'company.name' => 'company_name',
@@ -106,14 +105,14 @@ class SettingsController extends AbstractController
             'sync.maxRetries' => 'sync_max_retries',
             'sync.unstableThreshold' => 'sync_unstable_threshold',
         ];
-        
+
         foreach ($mappings as $path => $dbKey) {
             $value = $this->getNestedValue($data, $path);
             if ($value !== null) {
                 $this->saveSetting($repo, $dbKey, $value);
             }
         }
-        
+
         // Sauvegarder les providers AI avec leurs clés API
         if (isset($data['ai']['providers'])) {
             foreach ($data['ai']['providers'] as $provider) {
@@ -128,9 +127,9 @@ class SettingsController extends AbstractController
                 }
             }
         }
-        
+
         $this->entityManager->flush();
-        
+
         return $this->json(['message' => 'Settings updated successfully']);
     }
 
@@ -155,10 +154,10 @@ class SettingsController extends AbstractController
         $data = json_decode($request->getContent(), true);
         $provider = $data['provider'] ?? '';
         $apiKey = $data['apiKey'] ?? '';
-        
+
         $success = false;
         $message = '';
-        
+
         switch ($provider) {
             case 'zai':
                 $success = $this->testZaiConnection($apiKey);
@@ -180,7 +179,7 @@ class SettingsController extends AbstractController
             default:
                 $message = 'Test non supporté pour ce provider';
         }
-        
+
         return $this->json([
             'success' => $success,
             'message' => $message,
@@ -193,16 +192,16 @@ class SettingsController extends AbstractController
     {
         $settings = $this->getDefaultSettings();
         $repo = $this->entityManager->getRepository(AppSettings::class);
-        
+
         // Charger uniquement les settings publics
         $publicKeys = ['company_name', 'require_photo', 'require_pin', 'require_geolocation', 'geofencing_radius'];
-        
+
         $result = [];
         foreach ($publicKeys as $key) {
             $dbSetting = $repo->findOneBy(['settingKey' => $key]);
             $result[$key] = $dbSetting ? $dbSetting->getSettingValue() : ($settings[$key] ?? null);
         }
-        
+
         return $this->json($result);
     }
 
@@ -232,7 +231,7 @@ class SettingsController extends AbstractController
             ['id' => 'lightweight', 'name' => 'Local (léger)', 'enabled' => true],
             ['id' => 'tensorflow', 'name' => 'Local (TensorFlow)', 'enabled' => true],
         ];
-        
+
         // Providers externes
         $externalProviders = [
             'zai' => 'Z.AI',
@@ -240,14 +239,14 @@ class SettingsController extends AbstractController
             'google' => 'Google Vision',
             'custom' => 'API Personnalisée',
         ];
-        
+
         foreach ($externalProviders as $id => $name) {
             $provider = [
                 'id' => $id,
                 'name' => $name,
                 'enabled' => ($settings['ai_provider'] ?? '') === $id,
             ];
-            
+
             // ✅ Ne pas exposer les clés API aux non-admins
             if ($isAdmin) {
                 $provider['apiKey'] = $settings['ai_provider_' . $id . '_key'] ?? null;
@@ -257,22 +256,22 @@ class SettingsController extends AbstractController
                 // Indiquer si une clé est configurée sans la révéler
                 $provider['hasApiKey'] = !empty($settings['ai_provider_' . $id . '_key'] ?? null);
             }
-            
+
             $providers[] = $provider;
         }
-        
+
         return $providers;
     }
 
     private function saveSetting($repo, string $key, $value): void
     {
         $setting = $repo->findOneBy(['settingKey' => $key]);
-        
+
         if (!$setting) {
             $setting = new AppSettings();
             $setting->setSettingKey($key);
         }
-        
+
         $setting->setSettingValue($value);
         $this->entityManager->persist($setting);
     }
@@ -281,34 +280,60 @@ class SettingsController extends AbstractController
     {
         $keys = explode('.', $path);
         $value = $data;
-        
+
         foreach ($keys as $key) {
             if (!isset($value[$key])) {
                 return null;
             }
             $value = $value[$key];
         }
-        
+
         return $value;
     }
 
     private function testZaiConnection(string $apiKey): bool
     {
         if (empty($apiKey)) return false;
-        
+
         try {
-            // Test réel avec Z.AI
-            $ch = curl_init('https://api.z.ai/v1/health');
+            // Endpoint officiel selon la documentation Z.AI
+            $ch = curl_init('https://api.z.ai/api/paas/v4/chat/completions');
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: Bearer ' . $apiKey]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-            
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Authorization: Bearer ' . $apiKey,
+                'Content-Type: application/json',
+                'Accept-Language: en-US,en'
+            ]);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+                'model' => 'glm-4-flash', // Modèle rapide pour test
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => 'test'
+                    ]
+                ],
+                'max_tokens' => 1 // Minimum pour économiser
+            ]));
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
             curl_close($ch);
-            
-            return $httpCode === 200;
+
+            // Log pour déboguer
+            error_log("Z.AI Test - HTTP Code: " . $httpCode);
+            if ($error) {
+                error_log("Z.AI Test - CURL Error: " . $error);
+            } else {
+                error_log("Z.AI Test - Response: " . substr($response, 0, 200));
+            }
+
+            // 200 = succès, 401 = clé invalide mais API accessible
+            return $httpCode === 200 || $httpCode === 401;
         } catch (\Exception $e) {
+            error_log("Z.AI Test - Exception: " . $e->getMessage());
             return false;
         }
     }
@@ -316,17 +341,17 @@ class SettingsController extends AbstractController
     private function testOpenAiConnection(string $apiKey): bool
     {
         if (empty($apiKey)) return false;
-        
+
         try {
             $ch = curl_init('https://api.openai.com/v1/models');
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: Bearer ' . $apiKey]);
             curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-            
+
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            
+
             return $httpCode === 200;
         } catch (\Exception $e) {
             return false;
@@ -336,16 +361,16 @@ class SettingsController extends AbstractController
     private function testGoogleVisionConnection(string $apiKey): bool
     {
         if (empty($apiKey)) return false;
-        
+
         try {
             $ch = curl_init('https://vision.googleapis.com/v1/operations?key=' . $apiKey);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-            
+
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            
+
             // Google Vision retourne 200 même sans operations
             return $httpCode === 200;
         } catch (\Exception $e) {
@@ -356,23 +381,23 @@ class SettingsController extends AbstractController
     private function testCustomApiConnection(string $endpoint, string $apiKey): bool
     {
         if (empty($endpoint)) return false;
-        
+
         try {
             $headers = ['Content-Type: application/json'];
             if (!empty($apiKey)) {
                 $headers[] = 'Authorization: Bearer ' . $apiKey;
             }
-            
+
             $ch = curl_init($endpoint);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
             curl_setopt($ch, CURLOPT_TIMEOUT, 5);
             curl_setopt($ch, CURLOPT_NOBODY, true); // HEAD request
-            
+
             curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            
+
             return $httpCode > 0 && $httpCode < 500;
         } catch (\Exception $e) {
             return false;
