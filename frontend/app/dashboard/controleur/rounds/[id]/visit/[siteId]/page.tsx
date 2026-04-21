@@ -70,18 +70,23 @@ export default function ControllerVisitPage() {
   }, []);
 
   useEffect(() => {
-    if (currentStep === "qr") {
-      // Attendre que le DOM soit prêt avant d'initialiser le scanner
-      const timer = setTimeout(() => {
-        startScanner();
-      }, 300);
-      
-      return () => clearTimeout(timer);
-    } else {
+    if (currentStep !== "qr") {
       stopScanner();
+      return;
     }
+
+    // Only runs when currentStep === "qr"
+    const timer = setTimeout(() => {
+      startScanner();
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      stopScanner();
+    };
   }, [currentStep]);
 
+  
   const loadRoundSite = async () => {
     const round = await roundsService.getById(roundId);
     const site = round?.sites?.find((s: any) => s.site?.id === siteId);
@@ -115,7 +120,8 @@ export default function ControllerVisitPage() {
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
           distance,
-          withinGeofence: distance <= (roundSite?.site?.geofencingRadius || 100),
+          withinGeofence:
+            distance <= (roundSite?.site?.geofencingRadius || 100),
         });
         setIsLoading(false);
       },
@@ -163,14 +169,15 @@ export default function ControllerVisitPage() {
 
     try {
       const devices = await Html5Qrcode.getCameras();
-      
+
       if (devices && devices.length > 0) {
         setCameras(devices);
         // Préférer la caméra arrière
-        const backCamera = devices.find(d => 
-          d.label.toLowerCase().includes('back') || 
-          d.label.toLowerCase().includes('arrière') ||
-          d.label.toLowerCase().includes('environment')
+        const backCamera = devices.find(
+          (d) =>
+            d.label.toLowerCase().includes("back") ||
+            d.label.toLowerCase().includes("arrière") ||
+            d.label.toLowerCase().includes("environment"),
         );
         const cameraId = backCamera?.id || devices[0].id;
         setCurrentCamera(cameraId);
@@ -186,9 +193,9 @@ export default function ControllerVisitPage() {
           cameraId,
           config,
           onScanSuccess,
-          onScanFailure
+          onScanFailure,
         );
-        
+
         setIsScanning(true);
       } else {
         setHasCamera(false);
@@ -211,9 +218,9 @@ export default function ControllerVisitPage() {
   };
 
   const onScanSuccess = (decodedText: string) => {
-    console.log('QR Code scanné:', decodedText);
+    console.log("QR Code scanné:", decodedText);
     setQrCode(decodedText);
-    
+
     // Validation automatique
     if (decodedText === roundSite?.site?.qrCode) {
       setQrValidated(true);
@@ -233,23 +240,25 @@ export default function ControllerVisitPage() {
 
   const switchCamera = async () => {
     if (cameras.length < 2) return;
-    
-    const currentIndex = cameras.findIndex(c => c.id === currentCamera);
+
+    const currentIndex = cameras.findIndex((c) => c.id === currentCamera);
     const nextIndex = (currentIndex + 1) % cameras.length;
     const nextCamera = cameras[nextIndex].id;
-    
+
     await stopScanner();
     setCurrentCamera(nextCamera);
-    
+
     // Redémarrer avec la nouvelle caméra
     setTimeout(() => {
       if (scannerRef.current) {
-        scannerRef.current.start(
-          nextCamera,
-          { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
-          onScanSuccess,
-          onScanFailure
-        ).then(() => setIsScanning(true));
+        scannerRef.current
+          .start(
+            nextCamera,
+            { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+            onScanSuccess,
+            onScanFailure,
+          )
+          .then(() => setIsScanning(true));
       }
     }, 500);
   };
@@ -447,12 +456,12 @@ export default function ControllerVisitPage() {
             {/* Scanner de QR code */}
             {hasCamera ? (
               <div className="space-y-3">
-                <div 
+                <div
                   id={scannerContainerId}
                   className="w-full rounded-lg overflow-hidden bg-black"
                   style={{ minHeight: "300px" }}
                 />
-                
+
                 {cameras.length > 1 && (
                   <div className="flex justify-center">
                     <button
@@ -464,7 +473,7 @@ export default function ControllerVisitPage() {
                     </button>
                   </div>
                 )}
-                
+
                 {isScanning && (
                   <p className="text-xs text-gray-500 text-center">
                     <FontAwesomeIcon icon={faSpinner} spin className="mr-1" />
@@ -474,7 +483,10 @@ export default function ControllerVisitPage() {
               </div>
             ) : (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-                <FontAwesomeIcon icon={faCamera} className="text-3xl text-yellow-600 mb-2" />
+                <FontAwesomeIcon
+                  icon={faCamera}
+                  className="text-3xl text-yellow-600 mb-2"
+                />
                 <p className="text-yellow-800">Caméra non disponible</p>
                 <p className="text-sm text-yellow-600 mt-1">
                   Veuillez utiliser la saisie manuelle ci-dessous
@@ -506,13 +518,19 @@ export default function ControllerVisitPage() {
 
             {/* Affichage du QR code scanné */}
             {qrCode && (
-              <div className={`p-3 rounded-lg ${qrValidated ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+              <div
+                className={`p-3 rounded-lg ${qrValidated ? "bg-green-50 border border-green-200" : "bg-yellow-50 border border-yellow-200"}`}
+              >
                 <p className="text-sm text-gray-600">Code détecté :</p>
                 <p className="font-mono text-sm break-all">{qrCode}</p>
                 {qrValidated ? (
-                  <p className="text-green-600 text-sm mt-1">✅ QR Code valide</p>
+                  <p className="text-green-600 text-sm mt-1">
+                    ✅ QR Code valide
+                  </p>
                 ) : (
-                  <p className="text-yellow-600 text-sm mt-1">⚠️ QR Code non valide pour ce site</p>
+                  <p className="text-yellow-600 text-sm mt-1">
+                    ⚠️ QR Code non valide pour ce site
+                  </p>
                 )}
               </div>
             )}
@@ -537,7 +555,8 @@ export default function ControllerVisitPage() {
                   }}
                   className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
-                  Continuer <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
+                  Continuer{" "}
+                  <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
                 </button>
               )}
             </div>
