@@ -2,6 +2,7 @@
 
 namespace App\Controller\Api\SuperAdmin;
 
+use Doctrine\DBAL\Connection;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
@@ -11,6 +12,8 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_SUPERADMIN')]
 class SystemController extends AbstractController
 {
+    public function __construct(private Connection $connection) {}
+
     #[Route('/system', name: 'api_superadmin_system', methods: ['GET'])]
     public function getSystemInfo(): JsonResponse
     {
@@ -72,14 +75,34 @@ class SystemController extends AbstractController
 
     private function getDatabaseSize(): string
     {
-        // À implémenter avec une vraie requête
-        return '256 MB';
+        try {
+            $dbName = $this->connection->getDatabase();
+            $result = $this->connection->fetchOne(
+                'SELECT ROUND(SUM(data_length + index_length)) AS size
+                 FROM information_schema.tables
+                 WHERE table_schema = ?',
+                [$dbName]
+            );
+            return $result ? $this->formatBytes((int) $result) : 'N/A';
+        } catch (\Throwable) {
+            return 'N/A';
+        }
     }
 
     private function getDatabaseConnections(): int
     {
-        // À implémenter
-        return 5;
+        try {
+            $result = $this->connection->fetchOne(
+                "SHOW STATUS LIKE 'Threads_connected'"
+            );
+            // fetchOne retourne la première colonne ; on veut la valeur (2e col)
+            $row = $this->connection->fetchAssociative(
+                "SHOW STATUS LIKE 'Threads_connected'"
+            );
+            return $row ? (int) $row['Value'] : 0;
+        } catch (\Throwable) {
+            return 0;
+        }
     }
 
     private function getSystemUptime(): string

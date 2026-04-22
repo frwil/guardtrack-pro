@@ -4,6 +4,7 @@ namespace App\Controller\Api;
 
 use App\Entity\Site;
 use App\Entity\User;
+use App\Repository\PresenceRepository;
 use App\Repository\SiteRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -19,7 +20,8 @@ class SiteController extends AbstractController
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private SiteRepository $siteRepository
+        private SiteRepository $siteRepository,
+        private PresenceRepository $presenceRepository
     ) {
     }
 
@@ -88,7 +90,16 @@ class SiteController extends AbstractController
             'createdAt' => $site->getCreatedAt()->format('c'),
             'stats' => [
                 'activeAssignments' => $site->getAssignments()->filter(fn($a) => $a->getStatus() === 'ACTIVE')->count(),
-                'todayPresences' => 0, // À implémenter
+                'todayPresences' => $this->presenceRepository->createQueryBuilder('p')
+                    ->select('COUNT(p.id)')
+                    ->where('p.site = :site')
+                    ->andWhere('p.checkIn >= :start')
+                    ->andWhere('p.checkIn <= :end')
+                    ->setParameter('site',  $site->getId())
+                    ->setParameter('start', new \DateTimeImmutable('today 00:00:00'))
+                    ->setParameter('end',   new \DateTimeImmutable('today 23:59:59'))
+                    ->getQuery()
+                    ->getSingleScalarResult(),
             ]
         ]);
     }

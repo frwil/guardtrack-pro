@@ -251,16 +251,64 @@ class ReportController extends AbstractController
     }
 
     /**
-     * Statistiques quotidiennes
+     * Statistiques quotidiennes (pour graphiques)
      */
     #[Route('/daily-stats', name: 'api_reports_daily_stats', methods: ['GET'])]
     public function getDailyStats(Request $request): JsonResponse
     {
-        $startDate = new \DateTimeImmutable($request->query->get('startDate'));
-        $endDate = new \DateTimeImmutable($request->query->get('endDate'));
-        
-        // À implémenter
-        return $this->json([]);
+        $startDate = new \DateTimeImmutable($request->query->get('startDate') . ' 00:00:00');
+        $endDate   = new \DateTimeImmutable($request->query->get('endDate')   . ' 23:59:59');
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $siteIds  = array_column($this->getControllerSites($user), 'id');
+        $agentIds = array_column($this->getControllerAgents($user), 'id');
+
+        if (empty($siteIds) || empty($agentIds)) {
+            return $this->json([]);
+        }
+
+        $presences = $this->presenceRepository->createQueryBuilder('p')
+            ->where('p.site IN (:sites)')
+            ->andWhere('p.agent IN (:agents)')
+            ->andWhere('p.checkIn >= :start')
+            ->andWhere('p.checkIn <= :end')
+            ->setParameter('sites',  $siteIds)
+            ->setParameter('agents', $agentIds)
+            ->setParameter('start',  $startDate)
+            ->setParameter('end',    $endDate)
+            ->getQuery()
+            ->getResult();
+
+        // Grouper par date
+        $byDate = [];
+        foreach ($presences as $p) {
+            $date = $p->getCheckIn()->format('Y-m-d');
+            if (!isset($byDate[$date])) {
+                $byDate[$date] = ['date' => $date, 'present' => 0, 'absent' => 0, 'unknown' => 0];
+            }
+            $verdict = $p->getControllerVerdict();
+            if ($verdict === 'PRESENT') {
+                $byDate[$date]['present']++;
+            } elseif ($verdict === 'ABSENT') {
+                $byDate[$date]['absent']++;
+            } else {
+                $byDate[$date]['present']++; // Présence agent sans verdict = compté présent
+            }
+        }
+
+        // Remplir les jours manquants avec 0
+        $current = $startDate;
+        while ($current <= $endDate) {
+            $date = $current->format('Y-m-d');
+            if (!isset($byDate[$date])) {
+                $byDate[$date] = ['date' => $date, 'present' => 0, 'absent' => 0, 'unknown' => 0];
+            }
+            $current = $current->modify('+1 day');
+        }
+
+        ksort($byDate);
+        return $this->json(array_values($byDate));
     }
 
     /**
@@ -269,20 +317,86 @@ class ReportController extends AbstractController
     #[Route('/download', name: 'api_reports_download', methods: ['GET'])]
     public function downloadReport(Request $request): Response
     {
-        $startDate = new \DateTimeImmutable($request->query->get('startDate'));
-        $endDate = new \DateTimeImmutable($request->query->get('endDate'));
-        $format = $request->query->get('format', 'excel');
+        $startDate = new \DateTimeImmutable($request->query->get('startDate') . ' 00:00:00');
+        $endDate   = new \DateTimeImmutable($request->query->get('endDate')   . ' 23:59:59');
+        $format    = $request->query->get('format', 'excel');
         /** @var User $user */
         $user = $this->getUser();
-        
-        $sites = $this->getControllerSites($user);
-        $agents = $this->getControllerAgents($user);
-        
+
+        $sites    = $this->getControllerSites($user);
+        $agents   = $this->getControllerAgents($user);
+        $matrix   = $this->buildMatrix($startDate, $endDate, $sites, $agents);
+        $dates    = $matrix['dates'];
+        $rows     = $matrix['rows'];
+
         if ($format === 'excel') {
-            return $this->generateExcelReport($startDate, $endDate, $sites, $agents);
+            return $this->generateExcelReport($startDate, $endDate, $sites, $dates, $rows);
         } else {
-            return $this->generatePdfReport($startDate, $endDate, $sites, $agents);
+            return $this->generatePdfReport($startDate, $endDate, $sites, $dates, $rows);
         }
+    }
+
+    /**
+     * Construit la matrice agent×site×jours (logique partagée download/cross-table)
+     */
+    private function buildMatrix(\DateTimeImmutable $startDate, \DateTimeImmutable $endDate, array $sites, array $agents): array
+    {
+        $dates    = [];
+        $current  = $startDate;
+        while ($current <= $endDate) {
+            $dates[] = $current->format('Y-m-d');
+            $current = $current->modify('+1 day');
+        }
+
+        $siteIds  = array_column($sites,  'id');
+        $agentIds = array_column($agents, 'id');
+        $presenceIndex = [];
+
+        if (!empty($siteIds) && !empty($agentIds)) {
+            $results = $this->presenceRepository->createQueryBuilder('p')
+                ->where('p.site IN (:sites)')
+                ->andWhere('p.agent IN (:agents)')
+                ->andWhere('p.checkIn >= :start')
+                ->andWhere('p.checkIn <= :end')
+                ->setParameter('sites',  $siteIds)
+                ->setParameter('agents', $agentIds)
+                ->setParameter('start',  $startDate)
+                ->setParameter('end',    $endDate)
+                ->getQuery()
+                ->getResult();
+
+            foreach ($results as $p) {
+                $key = $p->getAgent()->getId() . '-' . $p->getSite()->getId() . '-' . $p->getCheckIn()->format('Y-m-d');
+                $presenceIndex[$key] = $p;
+            }
+        }
+
+        $rows = [];
+        foreach ($sites as $site) {
+            foreach ($agents as $agent) {
+                $row = ['agentName' => $agent['name'], 'siteName' => $site['name'], 'days' => []];
+                foreach ($dates as $date) {
+                    $key = $agent['id'] . '-' . $site['id'] . '-' . $date;
+                    $p   = $presenceIndex[$key] ?? null;
+                    if ($p === null) {
+                        $row['days'][$date] = null;
+                    } elseif ($p->getControllerVerdict() === 'ABSENT') {
+                        $row['days'][$date] = 0;
+                    } else {
+                        $row['days'][$date] = 1;
+                    }
+                }
+                $present = count(array_filter($row['days'], fn($v) => $v === 1));
+                $absent  = count(array_filter($row['days'], fn($v) => $v === 0));
+                if ($present + $absent > 0) {
+                    $row['totalPresent'] = $present;
+                    $row['totalAbsent']  = $absent;
+                    $rows[] = $row;
+                }
+            }
+        }
+
+        return ['dates' => $dates, 'rows' => $rows];
     }
 
     private function getControllerSites(User $user): array
@@ -319,107 +433,159 @@ class ReportController extends AbstractController
         return array_values($agents);
     }
 
-    private function generateExcelReport(\DateTimeImmutable $startDate, \DateTimeImmutable $endDate, array $sites, array $agents): Response
+    private function generateExcelReport(\DateTimeImmutable $startDate, \DateTimeImmutable $endDate, array $sites, array $dates, array $rows): Response
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        
+        $sheet->setTitle('Présences');
+
         // Titre
-        $sheet->setCellValue('A1', 'Rapport de présences');
+        $sheet->setCellValue('A1', 'Rapport de présences — GuardTrack Pro');
         $sheet->setCellValue('A2', sprintf('Période : %s - %s', $startDate->format('d/m/Y'), $endDate->format('d/m/Y')));
-        
-        // En-têtes du tableau croisé
-        $sheet->setCellValue('A4', 'Site / Agent');
-        
-        $col = 'B';
-        $dates = [];
-        $current = $startDate;
-        while ($current <= $endDate) {
-            $dates[] = $current;
-            $sheet->setCellValue($col . '4', $current->format('d/m'));
-            $col++;
-            $current = $current->modify('+1 day');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+
+        // En-têtes
+        $sheet->setCellValue('A4', 'Agent');
+        $sheet->setCellValue('B4', 'Site');
+        $colIdx = 3; // C = col 3
+        foreach ($dates as $date) {
+            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx);
+            $sheet->setCellValue($colLetter . '4', (new \DateTimeImmutable($date))->format('d/m'));
+            $colIdx++;
         }
-        $sheet->setCellValue($col . '4', 'Total');
-        
-        // Style des en-têtes
+        $totalCol   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx);
+        $tauxCol    = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1);
+        $sheet->setCellValue($totalCol . '4', 'Présences');
+        $sheet->setCellValue($tauxCol  . '4', 'Taux');
+
         $headerStyle = [
-            'font' => ['bold' => true],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F46E5']],
-            'font' => ['color' => ['rgb' => 'FFFFFF']],
+            'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F46E5']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ];
-        $sheet->getStyle('A4:' . $col . '4')->applyFromArray($headerStyle);
-        
-        // Données (à remplir avec les vraies données)
-        $row = 5;
-        foreach ($sites as $site) {
-            foreach ($agents as $agent) {
-                $sheet->setCellValue('A' . $row, $site['name'] . ' - ' . $agent['name']);
-                $row++;
+        $sheet->getStyle('A4:' . $tauxCol . '4')->applyFromArray($headerStyle);
+
+        // Données
+        $rowNum = 5;
+        foreach ($rows as $row) {
+            $sheet->setCellValue('A' . $rowNum, $row['agentName']);
+            $sheet->setCellValue('B' . $rowNum, $row['siteName']);
+            $colIdx = 3;
+            foreach ($dates as $date) {
+                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx);
+                $val = $row['days'][$date] ?? null;
+                $sheet->setCellValue($colLetter . $rowNum, $val === 1 ? 'P' : ($val === 0 ? 'A' : '-'));
+                if ($val === 1) {
+                    $sheet->getStyle($colLetter . $rowNum)->getFont()->getColor()->setRGB('166534');
+                } elseif ($val === 0) {
+                    $sheet->getStyle($colLetter . $rowNum)->getFont()->getColor()->setRGB('991B1B');
+                }
+                $sheet->getStyle($colLetter . $rowNum)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $colIdx++;
             }
+            $totalColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx);
+            $tauxColLetter  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1);
+            $evaluated = $row['totalPresent'] + $row['totalAbsent'];
+            $taux      = $evaluated > 0 ? round($row['totalPresent'] / $evaluated * 100) . '%' : '-';
+            $sheet->setCellValue($totalColLetter . $rowNum, $row['totalPresent'] . '/' . $evaluated);
+            $sheet->setCellValue($tauxColLetter  . $rowNum, $taux);
+            $sheet->getStyle($totalColLetter . $rowNum)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle($tauxColLetter  . $rowNum)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $rowNum++;
         }
-        
-        // Ajuster les largeurs de colonnes
-        $sheet->getColumnDimension('A')->setWidth(40);
-        
-        $writer = new Xlsx($spreadsheet);
-        
+
+        // Bordures sur tout le tableau
+        $lastRow = $rowNum - 1;
+        if ($lastRow >= 4) {
+            $sheet->getStyle('A4:' . $tauxCol . $lastRow)->applyFromArray([
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+            ]);
+        }
+
+        $sheet->getColumnDimension('A')->setWidth(25);
+        $sheet->getColumnDimension('B')->setWidth(30);
+        for ($i = 3; $i <= $colIdx + 1; $i++) {
+            $sheet->getColumnDimensionByColumn($i)->setWidth(8);
+        }
+
+        $writer   = new Xlsx($spreadsheet);
         $filename = sprintf('rapport_%s_%s.xlsx', $startDate->format('Ymd'), $endDate->format('Ymd'));
-        
-        $response = new StreamedResponse(function() use ($writer) {
+
+        $response = new StreamedResponse(function () use ($writer) {
             $writer->save('php://output');
         });
-        
         $response->headers->set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         $response->headers->set('Content-Disposition', 'attachment;filename="' . $filename . '"');
         $response->headers->set('Cache-Control', 'max-age=0');
-        
+
         return $response;
     }
 
-    private function generatePdfReport(\DateTimeImmutable $startDate, \DateTimeImmutable $endDate, array $sites, array $agents): Response
+    private function generatePdfReport(\DateTimeImmutable $startDate, \DateTimeImmutable $endDate, array $sites, array $dates, array $rows): Response
     {
         $options = new Options();
-        $options->set('defaultFont', 'Arial');
+        $options->set('defaultFont', 'DejaVu Sans');
         $dompdf = new Dompdf($options);
-        
-        // Construire le HTML
-        $html = '<h1>Rapport de présences</h1>';
-        $html .= '<p>Période : ' . $startDate->format('d/m/Y') . ' - ' . $endDate->format('d/m/Y') . '</p>';
-        $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse:collapse;">';
-        $html .= '<thead><tr style="background-color:#4F46E5; color:white;">';
-        $html .= '<th>Site / Agent</th>';
-        
-        $current = $startDate;
-        while ($current <= $endDate) {
-            $html .= '<th>' . $current->format('d/m') . '</th>';
-            $current = $current->modify('+1 day');
+
+        $html  = '<style>';
+        $html .= 'body { font-family: DejaVu Sans, sans-serif; font-size: 9px; }';
+        $html .= 'h1 { font-size: 14px; margin-bottom: 4px; }';
+        $html .= 'p  { margin: 2px 0 8px; font-size: 10px; color: #555; }';
+        $html .= 'table { width: 100%; border-collapse: collapse; }';
+        $html .= 'th { background-color: #4F46E5; color: white; padding: 4px; text-align: center; border: 1px solid #3730a3; }';
+        $html .= 'th.left { text-align: left; }';
+        $html .= 'td { padding: 3px 4px; border: 1px solid #d1d5db; text-align: center; }';
+        $html .= 'td.left { text-align: left; }';
+        $html .= 'tr:nth-child(even) td { background-color: #f9fafb; }';
+        $html .= '.present { color: #166534; font-weight: bold; }';
+        $html .= '.absent  { color: #991B1B; font-weight: bold; }';
+        $html .= '.unknown { color: #9ca3af; }';
+        $html .= '</style>';
+
+        $html .= '<h1>Rapport de présences — GuardTrack Pro</h1>';
+        $html .= '<p>Période : ' . $startDate->format('d/m/Y') . ' – ' . $endDate->format('d/m/Y') . '</p>';
+
+        $html .= '<table><thead><tr>';
+        $html .= '<th class="left">Agent</th><th class="left">Site</th>';
+        foreach ($dates as $date) {
+            $html .= '<th>' . (new \DateTimeImmutable($date))->format('d/m') . '</th>';
         }
-        $html .= '<th>Total</th>';
+        $html .= '<th>Présences</th><th>Taux</th>';
         $html .= '</tr></thead><tbody>';
-        
-        foreach ($sites as $site) {
-            foreach ($agents as $agent) {
-                $html .= '<tr>';
-                $html .= '<td>' . $site['name'] . ' - ' . $agent['name'] . '</td>';
-                // Données à remplir
-                $html .= '</tr>';
+
+        foreach ($rows as $row) {
+            $html .= '<tr>';
+            $html .= '<td class="left">' . htmlspecialchars($row['agentName']) . '</td>';
+            $html .= '<td class="left">' . htmlspecialchars($row['siteName'])  . '</td>';
+            foreach ($dates as $date) {
+                $val = $row['days'][$date] ?? null;
+                if ($val === 1) {
+                    $html .= '<td><span class="present">P</span></td>';
+                } elseif ($val === 0) {
+                    $html .= '<td><span class="absent">A</span></td>';
+                } else {
+                    $html .= '<td><span class="unknown">–</span></td>';
+                }
             }
+            $evaluated = $row['totalPresent'] + $row['totalAbsent'];
+            $taux      = $evaluated > 0 ? round($row['totalPresent'] / $evaluated * 100) . '%' : '–';
+            $html .= '<td>' . $row['totalPresent'] . '/' . $evaluated . '</td>';
+            $html .= '<td>' . $taux . '</td>';
+            $html .= '</tr>';
         }
-        
+
         $html .= '</tbody></table>';
-        
+
         $dompdf->loadHtml($html);
         $dompdf->setPaper('A4', 'landscape');
         $dompdf->render();
-        
+
         $filename = sprintf('rapport_%s_%s.pdf', $startDate->format('Ymd'), $endDate->format('Ymd'));
-        
+
         $response = new Response($dompdf->output());
         $response->headers->set('Content-Type', 'application/pdf');
         $response->headers->set('Content-Disposition', 'attachment;filename="' . $filename . '"');
-        
+
         return $response;
     }
 }
