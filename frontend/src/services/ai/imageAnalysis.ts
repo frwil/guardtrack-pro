@@ -164,15 +164,7 @@ class ImageAnalysisService {
   }
 
   private async analyzeWithZAI(imageData: string): Promise<UnifiedAnalysisResult> {
-    const provider = this.settings?.ai?.providers?.find((p: any) => p.id === 'zai');
-    
     console.log('🔵 [Z.AI] analyzeWithZAI appelé');
-    console.log('🔵 [Z.AI] Provider enabled:', provider?.enabled);
-    
-    if (!provider?.enabled) {
-      console.warn('⚠️ [Z.AI] Non activé, fallback vers lightweight');
-      return this.analyzeWithLightweight(imageData);
-    }
 
     try {
       // ✅ Vérifier et compresser l'image si nécessaire
