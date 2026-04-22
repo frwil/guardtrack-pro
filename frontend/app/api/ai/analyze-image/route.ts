@@ -209,12 +209,3 @@ export async function GET() {
     nodeEnv: process.env.NODE_ENV,
   });
 }
-
-// ✅ Configuration pour augmenter la limite de taille du body
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
-  },
-};
