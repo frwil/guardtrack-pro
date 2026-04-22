@@ -36,12 +36,13 @@ export type AnalysisContext = 'agent_checkin' | 'controller_visit';
 class ImageAnalysisService {
   private currentProvider: string = "lightweight";
   private settings: any = null;
-  private currentContext: AnalysisContext = 'agent_checkin'; // ✅ Ajouté
+  private currentContext: AnalysisContext = 'agent_checkin';
 
   async initialize(): Promise<void> {
     try {
       this.settings = await settingsService.getSettings();
       this.currentProvider = this.settings?.ai?.provider || "lightweight";
+      console.log('🔵 [ImageAnalysis] Initialisé avec provider:', this.currentProvider);
     } catch (error) {
       console.warn(
         "Impossible de charger les paramètres, utilisation du mode local",
@@ -50,17 +51,14 @@ class ImageAnalysisService {
     }
   }
 
-  /**
-   * ✅ Définir le contexte d'analyse
-   */
   setContext(context: AnalysisContext): void {
     this.currentContext = context;
+    console.log('🔵 [ImageAnalysis] Contexte défini:', context);
   }
 
   async analyzeImage(imageData: string): Promise<UnifiedAnalysisResult> {
     const startTime = performance.now();
 
-    // S'assurer que les paramètres sont chargés
     if (!this.settings) {
       await this.initialize();
     }
@@ -71,23 +69,18 @@ class ImageAnalysisService {
       case "tensorflow":
         result = await this.analyzeWithTensorFlow(imageData);
         break;
-
       case "zai":
         result = await this.analyzeWithZAI(imageData);
         break;
-
       case "openai":
         result = await this.analyzeWithOpenAI(imageData);
         break;
-
       case "google":
         result = await this.analyzeWithGoogleVision(imageData);
         break;
-
       case "custom":
         result = await this.analyzeWithCustomAPI(imageData);
         break;
-
       case "lightweight":
       default:
         result = await this.analyzeWithLightweight(imageData);
@@ -143,31 +136,101 @@ class ImageAnalysisService {
     };
   }
 
+  /**
+   * ✅ Compresse une image pour réduire sa taille avant envoi à l'API
+   */
+  private async compressImage(imageData: string, maxWidth: number = 1024, quality: number = 0.7): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(maxWidth / img.width, 1);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Impossible de créer le contexte canvas'));
+          return;
+        }
+        
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      };
+      img.onerror = () => reject(new Error('Impossible de charger l\'image'));
+      img.src = imageData;
+    });
+  }
+
   private async analyzeWithZAI(imageData: string): Promise<UnifiedAnalysisResult> {
     const provider = this.settings?.ai?.providers?.find((p: any) => p.id === 'zai');
     
+    console.log('🔵 [Z.AI] analyzeWithZAI appelé');
+    console.log('🔵 [Z.AI] Provider enabled:', provider?.enabled);
+    
     if (!provider?.enabled) {
-      console.warn('Z.AI non activé, fallback vers lightweight');
+      console.warn('⚠️ [Z.AI] Non activé, fallback vers lightweight');
       return this.analyzeWithLightweight(imageData);
     }
 
     try {
-      // Appeler l'API Route Next.js
+      // ✅ Vérifier et compresser l'image si nécessaire
+      const originalSizeKB = Math.round(imageData.length / 1024);
+      console.log(`📸 [Z.AI] Taille originale: ${originalSizeKB} KB`);
+      
+      let processedImageData = imageData;
+      
+      // Si l'image est trop grande (> 500 KB), la compresser
+      if (originalSizeKB > 500) {
+        console.log('🔄 [Z.AI] Compression de l\'image en cours...');
+        try {
+          processedImageData = await this.compressImage(imageData, 1024, 0.7);
+          const compressedSizeKB = Math.round(processedImageData.length / 1024);
+          console.log(`✅ [Z.AI] Image compressée: ${originalSizeKB} KB → ${compressedSizeKB} KB`);
+        } catch (compressError) {
+          console.warn('⚠️ [Z.AI] Échec compression, utilisation de l\'image originale');
+        }
+      }
+      
+      // Vérifier que l'image n'est pas trop volumineuse pour l'API
+      const finalSizeKB = Math.round(processedImageData.length / 1024);
+      if (finalSizeKB > 2000) {
+        console.warn(`⚠️ [Z.AI] Image trop volumineuse (${finalSizeKB} KB), fallback vers lightweight`);
+        return this.analyzeWithLightweight(imageData);
+      }
+
+      console.log('📡 [Z.AI] Envoi à /api/ai/analyze-image...');
       const response = await fetch('/api/ai/analyze-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageData,
-          context: this.currentContext, // ✅ Utilise le contexte actuel
+          imageData: processedImageData,
+          context: this.currentContext,
         }),
       });
 
+      console.log('📡 [Z.AI] Status réponse:', response.status);
+      
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Z.AI API error');
+        let errorMessage = `Z.AI API error: ${response.status}`;
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+          console.error('❌ [Z.AI] Réponse erreur:', error);
+        } catch {
+          const errorText = await response.text();
+          console.error('❌ [Z.AI] Réponse texte:', errorText.substring(0, 200));
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
+      console.log('✅ [Z.AI] Analyse réussie:', {
+        provider: result.provider,
+        personCount: result.personCount,
+        hasUniform: result.hasUniform,
+      });
       
       return {
         personCount: result.personCount || 1,
@@ -186,7 +249,7 @@ class ImageAnalysisService {
         processingTime: 0,
       };
     } catch (error) {
-      console.error('Erreur Z.AI:', error);
+      console.error('❌ [Z.AI] Exception:', error);
       return this.analyzeWithLightweight(imageData);
     }
   }
