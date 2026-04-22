@@ -183,6 +183,11 @@ export default function ControleurReportsPage() {
     return `${start.toLocaleDateString("fr-FR")} - ${end.toLocaleDateString("fr-FR")}`;
   };
 
+  const formatRate = (rate: number | null | undefined): string => {
+    const n = Number(rate);
+    return isNaN(n) ? '0%' : `${n.toFixed(1)}%`;
+  };
+
   const getPresenceIcon = (value: 1 | 0 | null) => {
     if (value === 1)
       return (
@@ -269,41 +274,34 @@ export default function ControleurReportsPage() {
     }
   };
 
-  // ✅ Calculer les totaux pour un groupe
-  const calculateGroupTotals = (rows: CrossTableReport["matrix"]) => {
-    const totalPresent = rows.reduce((sum, r) => sum + r.totalPresent, 0);
-    const totalAbsent = rows.reduce((sum, r) => sum + r.totalAbsent, 0);
-    const totalUnknown = rows.reduce((sum, r) => sum + r.totalUnknown, 0);
-    const total = totalPresent + totalAbsent + totalUnknown;
-    const rate =
-      totalPresent + totalAbsent > 0
-        ? (totalPresent / (totalPresent + totalAbsent)) * 100
-        : 0;
+  // Calculer les totaux depuis le champ `days` (source de vérité)
+  const countFromDays = (rows: CrossTableReport["matrix"]) => {
+    const totalPresent = rows.reduce((sum, r) =>
+      sum + Object.values(r.days).filter(v => v === 1).length, 0);
+    const totalAbsent = rows.reduce((sum, r) =>
+      sum + Object.values(r.days).filter(v => v === 0).length, 0);
+    const totalUnknown = rows.reduce((sum, r) =>
+      sum + Object.values(r.days).filter(v => v === null).length, 0);
+    return { totalPresent, totalAbsent, totalUnknown };
+  };
 
+  const calculateGroupTotals = (rows: CrossTableReport["matrix"]) => {
+    const { totalPresent, totalAbsent, totalUnknown } = countFromDays(rows);
+    const total = totalPresent + totalAbsent + totalUnknown;
+    const rate = totalPresent + totalAbsent > 0
+      ? (totalPresent / (totalPresent + totalAbsent)) * 100
+      : 0;
     return { totalPresent, totalAbsent, totalUnknown, total, rate };
   };
 
-  // ✅ Calculer les totaux généraux
   const calculateGrandTotals = () => {
     if (!crossTable)
-      return {
-        totalPresent: 0,
-        totalAbsent: 0,
-        totalUnknown: 0,
-        total: 0,
-        rate: 0,
-      };
-
-    const allRows = crossTable.matrix;
-    const totalPresent = allRows.reduce((sum, r) => sum + r.totalPresent, 0);
-    const totalAbsent = allRows.reduce((sum, r) => sum + r.totalAbsent, 0);
-    const totalUnknown = allRows.reduce((sum, r) => sum + r.totalUnknown, 0);
+      return { totalPresent: 0, totalAbsent: 0, totalUnknown: 0, total: 0, rate: 0 };
+    const { totalPresent, totalAbsent, totalUnknown } = countFromDays(crossTable.matrix);
     const total = totalPresent + totalAbsent + totalUnknown;
-    const rate =
-      totalPresent + totalAbsent > 0
-        ? (totalPresent / (totalPresent + totalAbsent)) * 100
-        : 0;
-
+    const rate = totalPresent + totalAbsent > 0
+      ? (totalPresent / (totalPresent + totalAbsent)) * 100
+      : 0;
     return { totalPresent, totalAbsent, totalUnknown, total, rate };
   };
 
@@ -510,7 +508,7 @@ export default function ControleurReportsPage() {
                   <div className="bg-white rounded-lg shadow p-4">
                     <p className="text-sm text-gray-500">Taux de présence</p>
                     <p className="text-2xl font-bold text-purple-600">
-                      {summary.presenceRate.toFixed(1)}%
+                      {formatRate(summary.presenceRate)}
                     </p>
                   </div>
                 </div>
@@ -528,7 +526,7 @@ export default function ControleurReportsPage() {
                           <th className="text-center py-2">Agents</th>
                           <th className="text-center py-2">✅ Présences</th>
                           <th className="text-center py-2">❌ Absences</th>
-                          <th className="text-center py-2">❓ Inconnu</th>
+                          <th className="text-center py-2" title="Jours sans visite enregistrée dans la période">⬜ Non évalué</th>
                           <th className="text-center py-2">Taux</th>
                         </tr>
                       </thead>
@@ -537,18 +535,7 @@ export default function ControleurReportsPage() {
                           const siteRows = crossTable.matrix.filter(
                             (r) => r.siteId === site.id,
                           );
-                          const totalPresent = siteRows.reduce(
-                            (sum, r) => sum + r.totalPresent,
-                            0,
-                          );
-                          const totalAbsent = siteRows.reduce(
-                            (sum, r) => sum + r.totalAbsent,
-                            0,
-                          );
-                          const totalUnknown = siteRows.reduce(
-                            (sum, r) => sum + r.totalUnknown,
-                            0,
-                          );
+                          const { totalPresent, totalAbsent, totalUnknown } = countFromDays(siteRows);
                           const totalEvaluated = totalPresent + totalAbsent;
 
                           const distinctAgents = new Set(
@@ -578,7 +565,7 @@ export default function ControleurReportsPage() {
                               </td>
                               <td className="text-center font-medium">
                                 {totalEvaluated > 0
-                                  ? `${rate.toFixed(0)}%`
+                                  ? `${((totalPresent / totalEvaluated) * 100).toFixed(0)}%`
                                   : "0%"}
                               </td>
                             </tr>
@@ -689,110 +676,87 @@ export default function ControleurReportsPage() {
 
                             return (
                               <React.Fragment key={`group-${groupIdx}`}>
-                                {/* ✅ En-tête du groupe */}
+                                {/* En-tête du groupe */}
                                 <tr className="bg-gray-100 border-t-2 border-gray-300">
-                                  <td className="py-2 sticky left-0 bg-gray-100 px-2 font-semibold">
+                                  <td
+                                    colSpan={dates.length + 3}
+                                    className="py-2 px-2 font-semibold sticky left-0 bg-gray-100"
+                                  >
                                     <div className="flex items-center">
                                       <FontAwesomeIcon
-                                        icon={
-                                          type === "agent"
-                                            ? faUsers
-                                            : faBuilding
-                                        }
+                                        icon={type === "agent" ? faUsers : faBuilding}
                                         className="mr-2 text-indigo-600 text-xs"
                                       />
                                       <span>{groupName}</span>
+                                      {subName && (
+                                        <span className="text-xs text-gray-500 font-normal ml-3">
+                                          ({subName})
+                                        </span>
+                                      )}
                                     </div>
-                                    {subName && (
-                                      <div className="text-xs text-gray-500 font-normal ml-5">
-                                        {subName}
-                                      </div>
-                                    )}
+                                  </td>
+                                </tr>
+
+                                {/* Détail des lignes du groupe */}
+                                {group.rows.map((row: any) => {
+                                  const rowPresent = Object.values(row.days).filter(v => v === 1).length;
+                                  const rowAbsent = Object.values(row.days).filter(v => v === 0).length;
+                                  const rowTotal = rowPresent + rowAbsent;
+                                  const rowRate = rowTotal > 0 ? (rowPresent / rowTotal) * 100 : 0;
+
+                                  return (
+                                    <tr
+                                      key={`${row.agentId}-${row.siteId}`}
+                                      className="border-b hover:bg-gray-50"
+                                    >
+                                      <td className="py-1.5 sticky left-0 bg-white pl-8 text-gray-600">
+                                        {type === "agent" ? row.siteName : row.agentName}
+                                      </td>
+                                      {dates.map((date: string) => (
+                                        <td key={date} className="text-center py-1.5">
+                                          {getPresenceIcon(row.days[date] ?? null)}
+                                        </td>
+                                      ))}
+                                      <td className="text-center py-1.5 bg-indigo-50/50 text-xs">
+                                        <span className="text-green-600">{rowPresent}</span>
+                                        <span className="text-gray-400 mx-0.5">/</span>
+                                        <span className="text-gray-600">{rowTotal}</span>
+                                      </td>
+                                      <td className="text-center py-1.5 bg-purple-50/50 text-xs">
+                                        {rowTotal > 0 ? `${rowRate.toFixed(0)}%` : ''}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+
+                                {/* Ligne sous-total du groupe */}
+                                <tr className="bg-indigo-50 border-b-2 border-indigo-200">
+                                  <td className="py-2 sticky left-0 bg-indigo-50 pl-4 text-xs font-semibold text-indigo-700">
+                                    Sous-total — {groupName}
                                   </td>
                                   {dates.map((date: string) => {
-                                    // Fusionner les statuts pour ce groupe et cette date
-                                    const hasPresent = group.rows.some(
-                                      (r: any) => r.days[date] === 1,
-                                    );
-                                    const hasAbsent = group.rows.some(
-                                      (r: any) => r.days[date] === 0,
-                                    );
-
+                                    const presentCount = group.rows.filter((r: any) => r.days[date] === 1).length;
+                                    const absentCount = group.rows.filter((r: any) => r.days[date] === 0).length;
                                     return (
-                                      <td
-                                        key={date}
-                                        className="text-center py-2"
-                                      >
-                                        {hasPresent ? (
-                                          <FontAwesomeIcon
-                                            icon={faCheckCircle}
-                                            className="text-green-600"
-                                          />
-                                        ) : hasAbsent ? (
-                                          <FontAwesomeIcon
-                                            icon={faTimesCircle}
-                                            className="text-red-600"
-                                          />
-                                        ) : (
-                                          <FontAwesomeIcon
-                                            icon={faQuestionCircle}
-                                            className="text-gray-400"
-                                          />
+                                      <td key={date} className="text-center py-2 text-xs">
+                                        {presentCount > 0 && (
+                                          <span className="text-green-600 font-medium">{presentCount}✅</span>
+                                        )}
+                                        {absentCount > 0 && (
+                                          <span className="text-red-500 ml-1">{absentCount}❌</span>
                                         )}
                                       </td>
                                     );
                                   })}
-                                  <td className="text-center py-2 bg-indigo-50 font-medium">
-                                    <span className="text-green-600">
-                                      {groupTotals.totalPresent}
-                                    </span>
-                                    <span className="text-gray-400 mx-1">
-                                      /
-                                    </span>
-                                    <span className="text-gray-600">
-                                      {groupTotals.total}
-                                    </span>
+                                  <td className="text-center py-2 bg-indigo-100 font-semibold text-xs">
+                                    <span className="text-green-600">{groupTotals.totalPresent}</span>
+                                    <span className="text-gray-400 mx-1">/</span>
+                                    <span className="text-gray-600">{groupTotals.totalPresent + groupTotals.totalAbsent}</span>
                                   </td>
-                                  <td className="text-center py-2 bg-purple-50 font-medium">
-                                    {groupTotals.rate.toFixed(0)}%
+                                  <td className="text-center py-2 bg-purple-100 font-semibold text-xs">
+                                    {formatRate(groupTotals.rate)}
                                   </td>
                                 </tr>
-
-                                {/* ✅ Détail des lignes du groupe */}
-                                {group.rows.map((row: any, rowIdx: number) => (
-                                  <tr
-                                    key={`${row.agentId}-${row.siteId}`}
-                                    className="border-b hover:bg-gray-50"
-                                  >
-                                    <td className="py-1.5 sticky left-0 bg-white pl-8 text-gray-600">
-                                      {type === "agent"
-                                        ? row.siteName
-                                        : row.agentName}
-                                    </td>
-                                    {dates.map((date: string) => (
-                                      <td
-                                        key={date}
-                                        className="text-center py-1.5"
-                                      >
-                                        {getPresenceIcon(row.days[date])}
-                                      </td>
-                                    ))}
-                                    <td className="text-center py-1.5 bg-indigo-50/50 text-xs">
-                                      <span className="text-green-600">
-                                        {row.totalPresent}
-                                      </span>
-                                      <span className="text-gray-400 mx-0.5">
-                                        /
-                                      </span>
-                                      <span className="text-gray-600">
-                                        {row.totalPresent +
-                                          row.totalAbsent +
-                                          row.totalUnknown}
-                                      </span>
-                                    </td>
-                                    <td className="text-center py-1.5 bg-purple-50/50"></td>
-                                  </tr>
-                                ))}
                               </React.Fragment>
                             );
                           })}
