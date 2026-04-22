@@ -15,7 +15,6 @@ async function getZAI() {
     }
     
     try {
-      // ✅ ZAI.create() ne prend pas d'arguments, il utilise la variable d'environnement
       zaiInstance = await ZAI.create();
       console.log('✅ [Z.AI] Instance SDK créée avec succès');
     } catch (error: any) {
@@ -30,7 +29,42 @@ export async function POST(request: NextRequest) {
   console.log('📡 [Z.AI] ========== NOUVELLE REQUÊTE ==========');
   
   try {
-    const { imageData, context } = await request.json();
+    // ✅ LIRE LE CORPS BRUT AVANT DE PARSER
+    let rawBody: string;
+    try {
+      rawBody = await request.text();
+      console.log('📡 [Z.AI] Corps brut reçu, longueur:', rawBody.length);
+    } catch (textError: any) {
+      console.error('❌ [Z.AI] Erreur lecture corps:', textError.message);
+      return NextResponse.json(
+        { error: 'Failed to read request body', fallback: true },
+        { status: 400 }
+      );
+    }
+    
+    if (!rawBody || rawBody.length === 0) {
+      console.error('❌ [Z.AI] Corps de requête vide');
+      return NextResponse.json(
+        { error: 'Empty request body', fallback: true },
+        { status: 400 }
+      );
+    }
+    
+    // ✅ PARSER LE JSON
+    let body: any;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (parseError: any) {
+      console.error('❌ [Z.AI] Erreur parsing JSON:', parseError.message);
+      console.error('❌ [Z.AI] Raw body (premiers 100 chars):', rawBody.substring(0, 100));
+      console.error('❌ [Z.AI] Raw body (derniers 100 chars):', rawBody.substring(Math.max(0, rawBody.length - 100)));
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body', fallback: true },
+        { status: 400 }
+      );
+    }
+    
+    const { imageData, context } = body;
     
     console.log('📡 [Z.AI] Contexte:', context);
     console.log('📡 [Z.AI] Image data reçue:', imageData ? `${Math.round(imageData.length / 1024)} KB` : 'NULL');
@@ -147,7 +181,6 @@ export async function POST(request: NextRequest) {
     console.error('❌ [Z.AI] Message:', error.message);
     console.error('❌ [Z.AI] Stack:', error.stack);
     
-    // Vérifier si c'est une erreur d'authentification
     if (error.message?.includes('API key') || error.message?.includes('authentication')) {
       console.error('❌ [Z.AI] Erreur d\'authentification - Vérifier ZAI_API_KEY');
     }
@@ -176,3 +209,12 @@ export async function GET() {
     nodeEnv: process.env.NODE_ENV,
   });
 }
+
+// ✅ Configuration pour augmenter la limite de taille du body
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+};
