@@ -102,11 +102,11 @@ class ReportController extends AbstractController
     #[Route('/summary', name: 'api_reports_summary', methods: ['GET'])]
     public function getSummary(Request $request): JsonResponse
     {
-        $startDate = new \DateTimeImmutable($request->query->get('startDate'));
-        $endDate = new \DateTimeImmutable($request->query->get('endDate'));
+        $startDate = new \DateTimeImmutable($request->query->get('startDate') . ' 00:00:00');
+        $endDate   = new \DateTimeImmutable($request->query->get('endDate')   . ' 23:59:59');
         /** @var User $user */
         $user = $this->getUser();
-        
+
         // Récupérer les données
         $sites = $this->getControllerSites($user);
         $siteIds = array_column($sites, 'id');
@@ -154,14 +154,14 @@ class ReportController extends AbstractController
     #[Route('/cross-table', name: 'api_reports_cross_table', methods: ['GET'])]
     public function getCrossTable(Request $request): JsonResponse
     {
-        $startDate = new \DateTimeImmutable($request->query->get('startDate'));
-        $endDate = new \DateTimeImmutable($request->query->get('endDate'));
+        $startDate = new \DateTimeImmutable($request->query->get('startDate') . ' 00:00:00');
+        $endDate   = new \DateTimeImmutable($request->query->get('endDate')   . ' 23:59:59');
         /** @var User $user */
         $user = $this->getUser();
-        
-        $sites = $this->getControllerSites($user);
+
+        $sites  = $this->getControllerSites($user);
         $agents = $this->getControllerAgents($user);
-        
+
         // Générer la liste des dates
         $dates = [];
         $current = $startDate;
@@ -169,47 +169,84 @@ class ReportController extends AbstractController
             $dates[] = $current->format('Y-m-d');
             $current = $current->modify('+1 day');
         }
-        
+
+        $siteIds  = array_column($sites,  'id');
+        $agentIds = array_column($agents, 'id');
+
+        // Charger toutes les présences de la période en une seule requête
+        $presences = [];
+        if (!empty($siteIds) && !empty($agentIds)) {
+            $results = $this->presenceRepository->createQueryBuilder('p')
+                ->where('p.site IN (:sites)')
+                ->andWhere('p.agent IN (:agents)')
+                ->andWhere('p.checkIn >= :start')
+                ->andWhere('p.checkIn <= :end')
+                ->setParameter('sites',  $siteIds)
+                ->setParameter('agents', $agentIds)
+                ->setParameter('start',  $startDate)
+                ->setParameter('end',    $endDate)
+                ->getQuery()
+                ->getResult();
+
+            // Indexer par agentId-siteId-date pour lookup O(1)
+            foreach ($results as $p) {
+                $key = $p->getAgent()->getId() . '-' . $p->getSite()->getId() . '-' . $p->getCheckIn()->format('Y-m-d');
+                // Si plusieurs entrées le même jour, garder la plus récente (dernière)
+                $presences[$key] = $p;
+            }
+        }
+
         // Construire la matrice
         $matrix = [];
         foreach ($sites as $site) {
             foreach ($agents as $agent) {
                 $row = [
-                    'agentId' => $agent['id'],
-                    'agentName' => $agent['name'],
-                    'siteId' => $site['id'],
-                    'siteName' => $site['name'],
-                    'days' => [],
+                    'agentId'      => $agent['id'],
+                    'agentName'    => $agent['name'],
+                    'siteId'       => $site['id'],
+                    'siteName'     => $site['name'],
+                    'days'         => [],
                     'totalPresent' => 0,
-                    'totalAbsent' => 0,
+                    'totalAbsent'  => 0,
                     'totalUnknown' => 0,
                 ];
-                
+
                 foreach ($dates as $date) {
-                    $presence = $this->presenceRepository->findOneBy([
-                        'agent' => $agent['id'],
-                        'site' => $site['id'],
-                    ], ['checkIn' => 'DESC']);
-                    
-                    // Simplifié : vérifier si présence ce jour-là
-                    $value = null; // À implémenter avec la vraie logique
+                    $key     = $agent['id'] . '-' . $site['id'] . '-' . $date;
+                    $presence = $presences[$key] ?? null;
+
+                    if ($presence === null) {
+                        // Aucune présence enregistrée ce jour-là
+                        $value = null;
+                    } elseif ($presence->getControllerVerdict() === 'PRESENT') {
+                        $value = 1;
+                    } elseif ($presence->getControllerVerdict() === 'ABSENT') {
+                        $value = 0;
+                    } else {
+                        // Présence agent enregistrée mais pas encore visitée par le contrôleur
+                        $value = 1;
+                    }
+
                     $row['days'][$date] = $value;
-                    
-                    if ($value === 1) $row['totalPresent']++;
-                    elseif ($value === 0) $row['totalAbsent']++;
-                    else $row['totalUnknown']++;
+
+                    if ($value === 1)      $row['totalPresent']++;
+                    elseif ($value === 0)  $row['totalAbsent']++;
+                    else                   $row['totalUnknown']++;
                 }
-                
-                $matrix[] = $row;
+
+                // N'inclure la ligne que si au moins une entrée existe (évite le bruit)
+                if ($row['totalPresent'] + $row['totalAbsent'] > 0 || !empty(array_filter($row['days'], fn($v) => $v !== null))) {
+                    $matrix[] = $row;
+                }
             }
         }
-        
+
         return $this->json([
-            'summary' => [], // Sera rempli par getSummary
-            'sites' => $sites,
-            'agents' => $agents,
-            'matrix' => $matrix,
-            'dates' => $dates,
+            'summary' => [],
+            'sites'   => $sites,
+            'agents'  => $agents,
+            'matrix'  => $matrix,
+            'dates'   => $dates,
         ]);
     }
 
