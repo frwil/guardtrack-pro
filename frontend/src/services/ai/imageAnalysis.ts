@@ -242,7 +242,8 @@ class ImageAnalysisService {
       };
     } catch (error) {
       console.error('❌ [Z.AI] Exception:', error);
-      return this.analyzeWithLightweight(imageData);
+      // On re-throw pour que l'appelant puisse logger l'erreur réelle
+      throw error;
     }
   }
 
