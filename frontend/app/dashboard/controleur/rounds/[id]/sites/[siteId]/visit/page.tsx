@@ -174,6 +174,21 @@ export default function ControllerVisitPage() {
     try {
       addLog('Initialisation du service IA...', 'info');
       await imageAnalysisEnhancedService.initialize();
+
+      // Auto-détection Z.AI : si la clé serveur est présente, on force le provider
+      try {
+        const testRes = await fetch('/api/ai/analyze-image');
+        const testData = await testRes.json();
+        if (testData.hasKey) {
+          await imageAnalysisEnhancedService.setProvider('zai');
+          setAiProvider('zai');
+          addLog('Z.AI détecté et activé automatiquement', 'success');
+          return;
+        }
+      } catch {
+        addLog('Test Z.AI échoué, utilisation du provider configuré', 'warning');
+      }
+
       const provider = imageAnalysisEnhancedService.getCurrentProvider();
       setAiProvider(provider);
       addLog(`Service IA initialisé - Provider actif: ${provider}`, 'success');
