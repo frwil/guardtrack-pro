@@ -3,6 +3,7 @@
 namespace App\Controller\Api;
 
 use App\Entity\AppSettings;
+use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -41,6 +42,13 @@ class SettingsController extends AbstractController
         $user = $this->getUser();
         $isAdmin = $user && ($user->isAdmin() || $user->isSuperAdmin());
 
+        // 🔍 LOG TEMPORAIRE POUR DÉBOGUER
+        error_log('=== SETTINGS DEBUG ===');
+        error_log('User: ' . ($user ? $user->getEmail() : 'NULL'));
+        error_log('Is Admin: ' . ($isAdmin ? 'YES' : 'NO'));
+        error_log('Z.AI API Key in DB: ' . ($settings['ai_provider_zai_key'] ?? 'NULL'));
+        error_log('AI Provider configured: ' . ($settings['ai_provider'] ?? 'NULL'));
+
         $response = [
             'company' => [
                 'name' => $settings['company_name'] ?? 'GuardTrack Pro',
@@ -68,16 +76,6 @@ class SettingsController extends AbstractController
                 'unstableThreshold' => (int) ($settings['sync_unstable_threshold'] ?? 3),
             ],
         ];
-
-        // ✅ Masquer les clés API pour les non-admins
-        if (!$isAdmin) {
-            foreach ($response['ai']['providers'] as &$provider) {
-                if (isset($provider['apiKey'])) {
-                    $provider['apiKey'] = null; // ou '***' pour indiquer que c'est configuré
-                    $provider['hasApiKey'] = !empty($provider['apiKey']);
-                }
-            }
-        }
 
         return $this->json($response);
     }
@@ -241,20 +239,24 @@ class SettingsController extends AbstractController
         ];
 
         foreach ($externalProviders as $id => $name) {
+            // ✅ Récupérer la clé API depuis les settings
+            $apiKey = $settings['ai_provider_' . $id . '_key'] ?? null;
+            
             $provider = [
                 'id' => $id,
                 'name' => $name,
                 'enabled' => ($settings['ai_provider'] ?? '') === $id,
             ];
 
-            // ✅ Ne pas exposer les clés API aux non-admins
+            // ✅ Pour les admins : on expose la vraie clé
             if ($isAdmin) {
-                $provider['apiKey'] = $settings['ai_provider_' . $id . '_key'] ?? null;
+                $provider['apiKey'] = $apiKey;
                 $provider['endpoint'] = $settings['ai_provider_' . $id . '_endpoint'] ?? null;
                 $provider['model'] = $settings['ai_provider_' . $id . '_model'] ?? null;
             } else {
-                // Indiquer si une clé est configurée sans la révéler
-                $provider['hasApiKey'] = !empty($settings['ai_provider_' . $id . '_key'] ?? null);
+                // ✅ Pour les non-admins : on masque la clé mais on indique si elle existe
+                $provider['apiKey'] = null;
+                $provider['hasApiKey'] = !empty($apiKey);
             }
 
             $providers[] = $provider;
@@ -293,9 +295,14 @@ class SettingsController extends AbstractController
 
     private function testZaiConnection(string $apiKey): bool
     {
-        if (empty($apiKey)) return false;
+        if (empty($apiKey)) {
+            error_log('Z.AI Test: API Key is empty');
+            return false;
+        }
 
         try {
+            error_log('Z.AI Test: Testing connection with API Key: ' . substr($apiKey, 0, 10) . '...');
+            
             // Test simple avec l'API REST
             $ch = curl_init('https://api.z.ai/api/paas/v4/chat/completions');
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -313,11 +320,20 @@ class SettingsController extends AbstractController
 
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
             curl_close($ch);
+
+            error_log('Z.AI Test - HTTP Code: ' . $httpCode);
+            if ($error) {
+                error_log('Z.AI Test - CURL Error: ' . $error);
+            } else {
+                error_log('Z.AI Test - Response: ' . substr($response, 0, 200));
+            }
 
             // 200 = succès, 401 = clé invalide (mais API accessible)
             return $httpCode === 200 || $httpCode === 401;
         } catch (\Exception $e) {
+            error_log('Z.AI Test - Exception: ' . $e->getMessage());
             return false;
         }
     }

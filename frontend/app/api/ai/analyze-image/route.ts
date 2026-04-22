@@ -6,24 +6,46 @@ let zaiInstance: any = null;
 
 async function getZAI() {
   if (!zaiInstance) {
-    // ✅ ZAI.create() ne prend pas d'arguments, il utilise la variable d'environnement
-    zaiInstance = await ZAI.create();
+    console.log('🔵 [Z.AI] Création de l\'instance SDK...');
+    console.log('🔵 [Z.AI] ZAI_API_KEY existe ?', !!process.env.ZAI_API_KEY);
+    console.log('🔵 [Z.AI] ZAI_API_KEY longueur:', process.env.ZAI_API_KEY?.length || 0);
+    
+    if (!process.env.ZAI_API_KEY) {
+      throw new Error('ZAI_API_KEY is not defined in environment variables');
+    }
+    
+    try {
+      // ✅ ZAI.create() ne prend pas d'arguments, il utilise la variable d'environnement
+      zaiInstance = await ZAI.create();
+      console.log('✅ [Z.AI] Instance SDK créée avec succès');
+    } catch (error: any) {
+      console.error('❌ [Z.AI] Erreur création instance SDK:', error.message);
+      throw error;
+    }
   }
   return zaiInstance;
 }
 
 export async function POST(request: NextRequest) {
+  console.log('📡 [Z.AI] ========== NOUVELLE REQUÊTE ==========');
+  
   try {
     const { imageData, context } = await request.json();
     
+    console.log('📡 [Z.AI] Contexte:', context);
+    console.log('📡 [Z.AI] Image data reçue:', imageData ? `${Math.round(imageData.length / 1024)} KB` : 'NULL');
+    
     if (!imageData) {
+      console.error('❌ [Z.AI] Pas d\'image fournie');
       return NextResponse.json(
         { error: 'Image data is required' },
         { status: 400 }
       );
     }
 
+    console.log('📡 [Z.AI] Obtention de l\'instance SDK...');
     const zai = await getZAI();
+    console.log('✅ [Z.AI] Instance SDK obtenue');
 
     // Préparer le message pour l'analyse
     const messages: VisionMessage[] = [
@@ -73,6 +95,9 @@ export async function POST(request: NextRequest) {
       }
     ];
 
+    console.log('📡 [Z.AI] Envoi de la requête à Z.AI...');
+    const startTime = performance.now();
+
     const response = await zai.chat.completions.createVision({
       model: 'glm-4.6v',
       messages,
@@ -81,14 +106,20 @@ export async function POST(request: NextRequest) {
       temperature: 0.1,
     });
 
+    const duration = Math.round(performance.now() - startTime);
+    console.log(`✅ [Z.AI] Réponse reçue en ${duration}ms`);
+
     const content = response.choices?.[0]?.message?.content;
+    console.log('📡 [Z.AI] Contenu brut:', content?.substring(0, 200) + '...');
     
     // Parser la réponse JSON
     let result;
     try {
       const cleanContent = content?.replace(/```json\n?|\n?```/g, '').trim() || '{}';
       result = JSON.parse(cleanContent);
-    } catch {
+      console.log('✅ [Z.AI] JSON parsé avec succès:', result);
+    } catch (parseError) {
+      console.warn('⚠️ [Z.AI] Erreur parsing JSON, utilisation du fallback');
       result = {
         personCount: context === 'controller_visit' ? 2 : 1,
         hasUniform: content?.toLowerCase().includes('uniform') || false,
@@ -101,6 +132,9 @@ export async function POST(request: NextRequest) {
       };
     }
 
+    console.log('✅ [Z.AI] Analyse terminée avec succès');
+    console.log('📡 [Z.AI] ========== FIN REQUÊTE ==========');
+
     return NextResponse.json({
       success: true,
       provider: 'zai',
@@ -109,7 +143,17 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Z.AI API Error:', error);
+    console.error('❌ [Z.AI] ========== ERREUR ==========');
+    console.error('❌ [Z.AI] Message:', error.message);
+    console.error('❌ [Z.AI] Stack:', error.stack);
+    
+    // Vérifier si c'est une erreur d'authentification
+    if (error.message?.includes('API key') || error.message?.includes('authentication')) {
+      console.error('❌ [Z.AI] Erreur d\'authentification - Vérifier ZAI_API_KEY');
+    }
+    
+    console.error('❌ [Z.AI] ========== FIN ERREUR ==========');
+    
     return NextResponse.json(
       { 
         success: false, 
@@ -119,4 +163,16 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// ✅ Route de test pour vérifier la configuration
+export async function GET() {
+  console.log('📡 [Z.AI] Test de configuration...');
+  
+  return NextResponse.json({
+    hasKey: !!process.env.ZAI_API_KEY,
+    keyLength: process.env.ZAI_API_KEY?.length || 0,
+    keyPrefix: process.env.ZAI_API_KEY ? process.env.ZAI_API_KEY.substring(0, 10) + '...' : 'none',
+    nodeEnv: process.env.NODE_ENV,
+  });
 }
