@@ -611,9 +611,29 @@ export default function ControllerVisitPage() {
       addLog(`📊 Uniforme: ${analysis.hasUniform ? 'Oui' : 'Non'} (${Math.round(analysis.uniformConfidence * 100)}%)`, analysis.hasUniform ? 'success' : 'warning');
       addLog(`📊 Score suspicion: ${analysis.suspicionScore}/100`, analysis.suspicionScore > 50 ? 'warning' : 'info');
       
-    } catch (error) {
-      addLog(`❌ Erreur analyse: ${error}`, 'error');
-      console.error("Erreur analyse:", error);
+    } catch (error: any) {
+      addLog(`❌ Erreur Z.AI: ${error?.message || error}`, 'error');
+      addLog('🔄 Fallback vers analyse locale (lightweight)', 'warning');
+      console.error("Erreur analyse Z.AI:", error);
+
+      // Fallback explicite vers lightweight
+      try {
+        const { lightweightAnalyzer } = await import('../../../../../../../../src/services/ai/lightweightAnalysis');
+        const fallback = await lightweightAnalyzer.analyzeImage(photoData);
+        setPhotoAnalysis({
+          ...fallback,
+          objects: [],
+          faces: undefined,
+          provider: 'lightweight',
+          processingTime: 0,
+          context: 'controller_visit',
+          meetsExpectations: fallback.personCount >= 2 && fallback.hasUniform,
+          expectationDetails: [],
+        } as any);
+        setAiProvider('lightweight');
+      } catch (fallbackError) {
+        addLog(`❌ Erreur fallback: ${fallbackError}`, 'error');
+      }
     } finally {
       setIsAnalyzingPhoto(false);
     }

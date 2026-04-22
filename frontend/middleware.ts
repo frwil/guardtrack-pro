@@ -11,31 +11,19 @@ export function middleware(request: NextRequest) {
     },
   });
 
-  // Copier tous les en-têtes sensibles pour les rewrites d'API
+  // Routes API internes Next.js (ex: /api/ai/*) : ne pas toucher aux headers
+  // pour éviter de perdre content-length et vider le body
+  if (request.nextUrl.pathname.startsWith('/api/ai/')) {
+    return NextResponse.next();
+  }
+
+  // Copier tous les en-têtes sensibles pour les rewrites d'API vers le backend externe
   if (request.nextUrl.pathname.startsWith('/api/')) {
-    // Préserver les en-têtes critiques pour les requêtes API
-    const headers = new Headers();
-
-    // En-têtes d'authentification
-    if (request.headers.has('authorization')) {
-      headers.set('authorization', request.headers.get('authorization')!);
-    }
-
-    // En-têtes de contenu
-    if (request.headers.has('content-type')) {
-      headers.set('content-type', request.headers.get('content-type')!);
-    }
-
-    // En-têtes Accept
-    if (request.headers.has('accept')) {
-      headers.set('accept', request.headers.get('accept')!);
-    }
-
-    // Copier les en-têtes personnalisés
+    // Copier les en-têtes personnalisés en préservant content-length
     const forwardHeaders = new Headers();
     requestHeaders.forEach((value, key) => {
       if (key.toLowerCase().startsWith('x-') ||
-          ['authorization', 'content-type', 'accept'].includes(key.toLowerCase())) {
+          ['authorization', 'content-type', 'accept', 'content-length'].includes(key.toLowerCase())) {
         forwardHeaders.set(key, value);
       }
     });
