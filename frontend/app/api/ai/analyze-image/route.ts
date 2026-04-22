@@ -1,29 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI, { VisionMessage } from 'z-ai-web-dev-sdk';
 
-// Instance singleton du SDK
-let zaiInstance: any = null;
-
-async function getZAI() {
-  if (!zaiInstance) {
-    console.log('🔵 [Z.AI] Création de l\'instance SDK...');
-    console.log('🔵 [Z.AI] ZAI_API_KEY existe ?', !!process.env.ZAI_API_KEY);
-    console.log('🔵 [Z.AI] ZAI_API_KEY longueur:', process.env.ZAI_API_KEY?.length || 0);
-    
-    if (!process.env.ZAI_API_KEY) {
-      throw new Error('ZAI_API_KEY is not defined in environment variables');
-    }
-    
-    try {
-      zaiInstance = await ZAI.create();
-      console.log('✅ [Z.AI] Instance SDK créée avec succès');
-    } catch (error: any) {
-      console.error('❌ [Z.AI] Erreur création instance SDK:', error.message);
-      throw error;
-    }
-  }
-  return zaiInstance;
-}
+const ZAI_BASE_URL = 'https://api.z.ai/api/paas/v4';
 
 export async function POST(request: NextRequest) {
   console.log('📡 [Z.AI] ========== NOUVELLE REQUÊTE ==========');
@@ -77,73 +54,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('📡 [Z.AI] Obtention de l\'instance SDK...');
-    const zai = await getZAI();
-    console.log('✅ [Z.AI] Instance SDK obtenue');
+    const apiKey = process.env.ZAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('ZAI_API_KEY is not defined in environment variables');
+    }
 
-    // Préparer le message pour l'analyse
-    const messages: VisionMessage[] = [
-      {
-        role: 'assistant',
-        content: [
-          { 
-            type: 'text', 
-            text: 'Output only valid JSON, no markdown, no extra text.' 
-          }
-        ]
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: context === 'controller_visit' 
-              ? `Analyze this security inspection photo. The photo should show the security agent and the controller (2 people). 
-                 Check if the agent is wearing proper security uniform (dark blue/black, badge, tactical vest).
-                 Return a JSON with:
-                 - personCount: number of people detected (expecting 2)
-                 - hasUniform: boolean (true if agent has security uniform)
-                 - uniformConfidence: number 0-1
-                 - objects: array of detected objects
-                 - faces: number of faces detected
-                 - quality: { brightness: 0-1, blur: 0-1, isAcceptable: boolean }
-                 - remarks: array of observations
-                 - suspicionScore: number 0-100`
-              : `Analyze this security agent check-in photo. The photo should show the agent alone (1 person).
-                 Check if the agent is wearing proper security uniform.
-                 Return a JSON with:
-                 - personCount: number of people detected (expecting 1)
-                 - hasUniform: boolean
-                 - uniformConfidence: number 0-1
-                 - objects: array of detected objects
-                 - faces: number of faces detected
-                 - quality: { brightness: 0-1, blur: 0-1, isAcceptable: boolean }
-                 - remarks: array of observations
-                 - suspicionScore: number 0-100`
-          },
-          {
-            type: 'image_url',
-            image_url: { url: imageData }
-          }
-        ]
-      }
-    ];
+    const prompt = context === 'controller_visit'
+      ? `Analyze this security inspection photo. The photo should show the security agent and the controller (2 people). Check if the agent is wearing proper security uniform (dark blue/black, badge, tactical vest). Return ONLY a JSON object with: personCount (number), hasUniform (boolean), uniformConfidence (number 0-1), objects (array of strings), faces (number), quality ({ brightness: number, blur: number, isAcceptable: boolean }), remarks (array of strings), suspicionScore (number 0-100).`
+      : `Analyze this security agent check-in photo. The photo should show the agent alone (1 person). Check if the agent is wearing proper security uniform. Return ONLY a JSON object with: personCount (number), hasUniform (boolean), uniformConfidence (number 0-1), objects (array of strings), faces (number), quality ({ brightness: number, blur: number, isAcceptable: boolean }), remarks (array of strings), suspicionScore (number 0-100).`;
 
     console.log('📡 [Z.AI] Envoi de la requête à Z.AI...');
     const startTime = performance.now();
 
-    const response = await zai.chat.completions.createVision({
-      model: 'glm-4.6v',
-      messages,
-      thinking: { type: 'disabled' },
-      max_tokens: 500,
-      temperature: 0.1,
+    const response = await fetch(`${ZAI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'glm-4v-flash',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: imageData } },
+            ],
+          },
+        ],
+        max_tokens: 500,
+        temperature: 0.1,
+      }),
     });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Z.AI API error ${response.status}: ${errText.substring(0, 200)}`);
+    }
 
     const duration = Math.round(performance.now() - startTime);
     console.log(`✅ [Z.AI] Réponse reçue en ${duration}ms`);
 
-    const content = response.choices?.[0]?.message?.content;
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
     console.log('📡 [Z.AI] Contenu brut:', content?.substring(0, 200) + '...');
     
     // Parser la réponse JSON
