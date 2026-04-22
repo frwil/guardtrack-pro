@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'glm-4v-flash',
+        model: 'glm-4.6v-flash',
         messages: [
           {
             role: 'user',
