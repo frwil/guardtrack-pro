@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { chatService, ChatConversation, ChatMessage } from '../services/api/chat';
+import { getPusher } from '../lib/pusher';
 
 export function useChat() {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
@@ -10,16 +11,13 @@ export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [totalUnread, setTotalUnread] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
-  const [eventSource, setEventSource] = useState<EventSource | null>(null);
 
-  // Charger les conversations
   const loadConversations = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await chatService.getConversations();
       setConversations(data);
-      const unread = data.reduce((sum, c) => sum + c.unreadCount, 0);
-      setTotalUnread(unread);
+      setTotalUnread(data.reduce((sum, c) => sum + c.unreadCount, 0));
     } catch (error) {
       console.error('Erreur chargement conversations:', error);
     } finally {
@@ -27,7 +25,6 @@ export function useChat() {
     }
   }, []);
 
-  // Charger les messages d'une conversation
   const loadMessages = useCallback(async (conversationId: number) => {
     setIsLoading(true);
     try {
@@ -41,19 +38,15 @@ export function useChat() {
     }
   }, []);
 
-  // Envoyer un message
   const sendMessage = useCallback(async (conversationId: number, content: string) => {
     try {
       const message = await chatService.sendMessage(conversationId, content);
       setMessages(prev => [...prev, message]);
-      
-      // Mettre à jour la conversation dans la liste
-      setConversations(prev => prev.map(c => 
-        c.id === conversationId 
+      setConversations(prev => prev.map(c =>
+        c.id === conversationId
           ? { ...c, lastMessage: message, updatedAt: message.createdAt }
           : c
       ));
-      
       return message;
     } catch (error) {
       console.error('Erreur envoi message:', error);
@@ -61,7 +54,6 @@ export function useChat() {
     }
   }, []);
 
-  // Créer une conversation
   const createConversation = useCallback(async (participantIds: number[], roundId?: number) => {
     try {
       const conversation = await chatService.createConversation({
@@ -77,17 +69,11 @@ export function useChat() {
     }
   }, []);
 
-  // Obtenir ou créer la conversation d'une ronde
   const getRoundConversation = useCallback(async (roundId: number) => {
     try {
       const conversation = await chatService.getRoundConversation(roundId);
-      
-      // Vérifier si elle existe déjà dans la liste
       const exists = conversations.find(c => c.id === conversation.id);
-      if (!exists) {
-        setConversations(prev => [conversation, ...prev]);
-      }
-      
+      if (!exists) setConversations(prev => [conversation, ...prev]);
       return conversation;
     } catch (error) {
       console.error('Erreur récupération conversation ronde:', error);
@@ -95,57 +81,49 @@ export function useChat() {
     }
   }, [conversations]);
 
-  // Connexion Mercure pour les messages en temps réel
+  // Abonnement Pusher au canal de la conversation courante
   useEffect(() => {
-    const hubUrl = process.env.NEXT_PUBLIC_MERCURE_HUB_URL || 'http://localhost:3001/.well-known/mercure';
-    const es = new EventSource(`${hubUrl}?topic=/chat/conversations/{id}`);
-    
-    es.onopen = () => setIsConnected(true);
-    es.onerror = () => setIsConnected(false);
-    
-    es.addEventListener('message', (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'chat_message') {
-          const message = data.message as ChatMessage;
-          
-          // Mettre à jour les messages si c'est la conversation courante
-          if (currentConversation?.id === message.conversationId) {
-            setMessages(prev => [...prev, message]);
-          }
-          
-          // Mettre à jour la liste des conversations
-          setConversations(prev => prev.map(c => 
-            c.id === message.conversationId 
-              ? { 
-                  ...c, 
-                  lastMessage: message, 
-                  updatedAt: message.createdAt,
-                  unreadCount: currentConversation?.id === message.conversationId 
-                    ? c.unreadCount 
-                    : c.unreadCount + 1 
-                }
-              : c
-          ));
-          
-          // Mettre à jour le compteur non lu
-          if (currentConversation?.id !== message.conversationId) {
-            setTotalUnread(prev => prev + 1);
-          }
-        }
-      } catch (error) {
-        console.error('Erreur parsing message Mercure:', error);
+    if (!currentConversation?.id) return;
+
+    const pusher  = getPusher();
+    const channel = pusher.subscribe(`chat-conversation-${currentConversation.id}`);
+
+    channel.bind('pusher:subscription_succeeded', () => setIsConnected(true));
+    channel.bind('pusher:subscription_error',   () => setIsConnected(false));
+
+    channel.bind('new-message', (data: { conversationId: number; message: ChatMessage }) => {
+      const { conversationId, message } = data;
+
+      if (currentConversation?.id === conversationId) {
+        setMessages(prev => {
+          // Éviter les doublons (message déjà ajouté par sendMessage)
+          if (prev.some(m => m.id === message.id)) return prev;
+          return [...prev, message];
+        });
+      }
+
+      setConversations(prev => prev.map(c =>
+        c.id === conversationId
+          ? {
+              ...c,
+              lastMessage: message,
+              updatedAt: message.createdAt,
+              unreadCount: currentConversation?.id === conversationId ? c.unreadCount : c.unreadCount + 1,
+            }
+          : c
+      ));
+
+      if (currentConversation?.id !== conversationId) {
+        setTotalUnread(prev => prev + 1);
       }
     });
-    
-    setEventSource(es);
-    
-    return () => {
-      es.close();
-    };
-  }, [currentConversation]);
 
-  // Charger les conversations au démarrage
+    return () => {
+      pusher.unsubscribe(`chat-conversation-${currentConversation.id}`);
+      setIsConnected(false);
+    };
+  }, [currentConversation?.id]);
+
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);

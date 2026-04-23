@@ -1,0 +1,7 @@
+services:
+    App\Service\PusherService:
+        arguments:
+            $appId:    '%env(PUSHER_APP_ID)%'
+            $appKey:   '%env(PUSHER_APP_KEY)%'
+            $appSecret: '%env(PUSHER_APP_SECRET)%'
+            $cluster:  '%env(PUSHER_APP_CLUSTER)%'

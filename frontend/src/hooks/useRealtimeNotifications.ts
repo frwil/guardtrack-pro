@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { getPusher } from '../lib/pusher';
 
 interface RealtimeNotification {
   id: number;
@@ -21,53 +22,34 @@ export function useRealtimeNotifications() {
   useEffect(() => {
     if (!user?.id) return;
 
-    const mercureUrl = process.env.NEXT_PUBLIC_MERCURE_URL || 'http://localhost:3001/.well-known/mercure';
-    const topic = `/users/${user.id}/notifications`;
-    
-    const url = new URL(mercureUrl);
-    url.searchParams.append('topic', topic);
-    
-    const eventSource = new EventSource(url.toString());
-    
-    eventSource.onopen = () => {
-      console.log('🔔 Connexion Mercure établie');
+    const pusher       = getPusher();
+    const channelName  = `private-user-${user.id}`;
+    const channel      = pusher.subscribe(channelName);
+
+    channel.bind('pusher:subscription_succeeded', () => {
+      console.log('🔔 Pusher connecté — canal', channelName);
       setIsConnected(true);
-    };
-    
-    eventSource.onerror = (error) => {
-      console.error('Erreur Mercure:', error);
+    });
+
+    channel.bind('pusher:subscription_error', (err: any) => {
+      console.error('Erreur abonnement Pusher:', err);
       setIsConnected(false);
-    };
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        const notification: RealtimeNotification = {
-          id: data.id,
-          title: data.title,
-          message: data.message,
-          severity: data.severity,
-          link: data.link,
-          createdAt: data.createdAt,
-        };
-        
-        setNotifications(prev => [notification, ...prev].slice(0, 50));
-        setLastNotification(notification);
-        
-        // Afficher une notification navigateur si supporté
-        if (Notification.permission === 'granted') {
-          new Notification(notification.title, {
-            body: notification.message,
-            icon: '/icons/icon-192.png',
-          });
-        }
-      } catch (error) {
-        console.error('Erreur parsing notification:', error);
+    });
+
+    channel.bind('new-notification', (data: RealtimeNotification) => {
+      setNotifications(prev => [data, ...prev].slice(0, 50));
+      setLastNotification(data);
+
+      if (Notification.permission === 'granted') {
+        new Notification(data.title, {
+          body: data.message,
+          icon: '/icons/icon-192.png',
+        });
       }
-    };
-    
+    });
+
     return () => {
-      eventSource.close();
+      pusher.unsubscribe(channelName);
       setIsConnected(false);
     };
   }, [user?.id]);
