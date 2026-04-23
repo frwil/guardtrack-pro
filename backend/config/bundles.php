@@ -9,5 +9,4 @@ return [
     Lexik\Bundle\JWTAuthenticationBundle\LexikJWTAuthenticationBundle::class => ['all' => true],
     Nelmio\CorsBundle\NelmioCorsBundle::class => ['all' => true],
     Doctrine\Bundle\FixturesBundle\DoctrineFixturesBundle::class => ['dev' => true, 'test' => true],
-    // Symfony\Bundle\MercureBundle\MercureBundle::class => ['all' => true], // Remplacé par Pusher
 ];
