@@ -1,5 +1,3 @@
-parameters:
-
 services:
     _defaults:
         autowire: true
@@ -12,12 +10,13 @@ services:
             - '../src/Entity/'
             - '../src/Kernel.php'
 
-    # Make core services public for testing and direct access
-    security.password_hasher:
-        public: true
+    Doctrine\ORM\EntityManagerInterface: '@doctrine.orm.entity_manager'
 
-    Doctrine\ORM\EntityManagerInterface:
-        public: true
+    Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface: '@lexik_jwt_authentication.jwt_manager'
 
-    Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface:
-        public: true
+    App\Service\PusherService:
+        arguments:
+            $appId:     '%env(default::PUSHER_APP_ID)%'
+            $appKey:    '%env(default::PUSHER_APP_KEY)%'
+            $appSecret: '%env(default::PUSHER_APP_SECRET)%'
+            $cluster:   '%env(default::PUSHER_APP_CLUSTER)%'

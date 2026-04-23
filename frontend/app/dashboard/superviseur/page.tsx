@@ -38,6 +38,7 @@ export default function SuperviseurDashboardPage() {
   const [sitesWithActivity, setSitesWithActivity] = useState<any[]>([]);
   const [todayStats, setTodayStats] = useState({
     presences: 0,
+    weekPresences: 0,
     absences: 0,
     rounds: 0,
   });
@@ -82,8 +83,12 @@ export default function SuperviseurDashboardPage() {
           .slice(0, 5)
       );
 
+      // weekPresences : priorité au champ backend, sinon on compte les recentPresences (7 j)
+      const weekCount = (dashData.weekPresences ?? 0) || (dashData.recentPresences?.length ?? 0);
+
       setTodayStats({
         presences: dashData.todayPresences ?? 0,
+        weekPresences: weekCount,
         absences: 0,
         rounds: dashData.todayRounds ?? 0,
       });
@@ -198,8 +203,12 @@ export default function SuperviseurDashboardPage() {
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Présences aujourd'hui</p>
-              <p className="text-2xl font-bold text-green-600">{todayStats.presences}</p>
+              <p className="text-sm text-gray-500">
+                {todayStats.presences > 0 ? "Présences aujourd'hui" : "Présences (7 j)"}
+              </p>
+              <p className="text-2xl font-bold text-green-600">
+                {todayStats.presences > 0 ? todayStats.presences : todayStats.weekPresences}
+              </p>
             </div>
             <FontAwesomeIcon icon={faCheckCircle} className="text-2xl text-green-300" />
           </div>
@@ -209,8 +218,12 @@ export default function SuperviseurDashboardPage() {
       {/* Activité du jour */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">✅ Présences</p>
-          <p className="text-2xl font-bold text-green-600">{todayStats.presences}</p>
+          <p className="text-sm text-gray-500">
+            {todayStats.presences > 0 ? '✅ Présences aujourd\'hui' : '✅ Présences (7 jours)'}
+          </p>
+          <p className="text-2xl font-bold text-green-600">
+            {todayStats.presences > 0 ? todayStats.presences : todayStats.weekPresences}
+          </p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-sm text-gray-500">❌ Absences</p>
