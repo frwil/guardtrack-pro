@@ -13,7 +13,7 @@ export function getPusher(): Pusher {
   instance = new Pusher(PUSHER_KEY, {
     cluster: PUSHER_CLUSTER,
     channelAuthorization: {
-      endpoint: `${API_URL}/api/pusher/auth`,
+      endpoint: `${API_URL}/pusher/auth`,
       transport: 'ajax',
       headersProvider: () => {
         const token = getToken();
