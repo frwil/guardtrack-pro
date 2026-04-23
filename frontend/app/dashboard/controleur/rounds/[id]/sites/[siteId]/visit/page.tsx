@@ -31,12 +31,14 @@ import {
   faShield,
   faCircleCheck,
   faCheck,
-  faUpload,
+  faBug,
+  faServer,
   faDesktop,
   faMobileAlt,
   faFolderOpen,
 } from "@fortawesome/free-solid-svg-icons";
 import { Html5Qrcode } from "html5-qrcode";
+import { CameraCapture } from "../../../../../../../../src/components/CameraCapture";
 
 type Step =
   | "geoloc"
@@ -82,7 +84,7 @@ export default function ControllerVisitPage() {
   // Détection du type d'appareil
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showCamera, setShowCamera] = useState(false);
 
   // Scanner QR code avec html5-qrcode
   const [hasCamera, setHasCamera] = useState(true);
@@ -437,67 +439,33 @@ export default function ControllerVisitPage() {
   // ÉTAPE 4 : PHOTO (avec analyse IA contextuelle)
   // ============================================================
   
-  // Capture via caméra (mobile/tablette)
-  const capturePhoto = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "environment",
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      });
+  const simulatePhoto = () => {
+    addLog('🎭 Simulation de photo (test)', 'warning');
+    const canvas = document.createElement("canvas");
+    canvas.width = 400;
+    canvas.height = 400;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const gradient = ctx.createLinearGradient(0, 0, 400, 400);
+      gradient.addColorStop(0, "#4f46e5");
+      gradient.addColorStop(1, "#7c3aed");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 400, 400);
 
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      await video.play();
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext("2d");
-      ctx?.drawImage(video, 0, 0);
-
-      const photoData = canvas.toDataURL("image/jpeg", 0.8);
-      setPhoto(photoData);
-      setPhotoSource("camera"); // ✅ Source = caméra
-
-      stream.getTracks().forEach((track) => track.stop());
-
-      analyzePhoto(photoData);
-    } catch (error) {
-      console.error("Erreur caméra:", error);
-      setError("Impossible d'accéder à la caméra. Vérifiez les permissions.");
-    }
-  };
-
-  // Sélection de fichier (ordinateur uniquement)
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setError("Veuillez sélectionner une image valide");
-      return;
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 24px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("📸 Contrôleur + Agent", 200, 180);
+      ctx.font = "16px Arial";
+      ctx.fillText("GuardTrack Pro - Photo test", 200, 230);
+      ctx.font = "14px Arial";
+      ctx.fillText(new Date().toLocaleString("fr-FR"), 200, 270);
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const photoData = e.target?.result as string;
-      setPhoto(photoData);
-      setPhotoSource("gallery"); // ✅ Source = galerie
-      analyzePhoto(photoData);
-    };
-    reader.onerror = () => {
-      setError("Erreur lors de la lecture du fichier");
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const triggerFileSelect = () => {
-    fileInputRef.current?.click();
+    const photoData = canvas.toDataURL("image/jpeg");
+    setPhoto(photoData);
+    addLog(`✅ Photo simulée créée`, 'success');
+    analyzePhoto(photoData);
   };
 
   const analyzePhoto = async (photoData: string) => {
@@ -628,14 +596,21 @@ export default function ControllerVisitPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Input file caché pour la sélection de fichier (ordinateur uniquement) */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/jpg,image/webp,image/bmp"
-        onChange={handleFileSelect}
-        className="hidden"
-      />
+      {/* Composant de capture photo plein écran */}
+      {showCamera && (
+        <CameraCapture
+          multiple={false}
+          title="Photo de visite"
+          description="Contrôleur + agent en tenue"
+          onCapture={(_, optimized) => {
+            setPhoto(optimized.dataUrl);
+            setShowCamera(false);
+            addLog(`✅ Photo capturée via CameraCapture (${Math.round(optimized.dataUrl.length / 1024)} KB)`, 'success');
+            analyzePhoto(optimized.dataUrl);
+          }}
+          onCancel={() => setShowCamera(false)}
+        />
+      )}
 
       {/* Barre de progression dynamique */}
       <div className="bg-white rounded-lg shadow p-4">
@@ -663,6 +638,262 @@ export default function ControllerVisitPage() {
 
       {/* Contenu de l'étape */}
       <div className="bg-white rounded-lg shadow p-6">
+        {/* ÉTAPE PHOTO */}
+        {currentStep === "photo" && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold flex items-center">
+              <FontAwesomeIcon
+                icon={faCamera}
+                className="mr-2 text-indigo-600"
+              />
+              Photo de vérification
+              {!isStepRequired("photo") && (
+                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                  Optionnel
+                </span>
+              )}
+            </h2>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-blue-800 flex items-center">
+                <FontAwesomeIcon icon={faLightbulb} className="mr-2" />
+                {isMobile || isTablet 
+                  ? "Prenez une photo montrant l'agent en tenue de travail"
+                  : "Sélectionnez une photo montrant l'agent en tenue de travail"}
+              </p>
+            </div>
+
+            {!photo ? (
+              <div className="text-center py-8 space-y-4">
+                <button
+                  onClick={() => setShowCamera(true)}
+                  className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
+                >
+                  <FontAwesomeIcon icon={faCamera} className="mr-3 text-2xl" />
+                  Prendre une photo
+                </button>
+                
+                <p className="text-sm text-gray-500 flex items-center justify-center">
+                  <FontAwesomeIcon
+                    icon={faShield}
+                    className="mr-1 text-gray-400"
+                  />
+                  {isStepRequired("photo") 
+                    ? "La photo est obligatoire pour valider la visite"
+                    : "La photo est optionnelle mais recommandée"}
+                </p>
+
+                {/* <button
+                  onClick={simulatePhoto}
+                  className="text-xs text-gray-400 underline mt-4"
+                >
+                  [Test] Simuler une photo
+                </button> */}
+
+                {!isStepRequired("photo") && (
+                  <button
+                    onClick={goToNextStep}
+                    className="w-full py-2 text-gray-500 underline text-sm"
+                  >
+                    Passer cette étape
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="relative">
+                  <img
+                    src={photo}
+                    alt="Capture"
+                    className="w-full max-w-md mx-auto rounded-lg shadow-md"
+                  />
+                  <button
+                    onClick={() => {
+                      setPhoto(null);
+                      setPhotoAnalysis(null);
+                      addLog('Photo supprimée', 'info');
+                    }}
+                    className="absolute top-2 right-2 bg-white rounded-full p-2 shadow-md hover:bg-gray-100"
+                    title="Reprendre la photo"
+                  >
+                    <FontAwesomeIcon icon={faRotate} />
+                  </button>
+                </div>
+
+                {isAnalyzingPhoto ? (
+                  <div className="text-center py-6 bg-blue-50 rounded-lg">
+                    <FontAwesomeIcon
+                      icon={faSpinner}
+                      spin
+                      className="text-3xl text-indigo-600 mb-3"
+                    />
+                    <p className="text-gray-700 font-medium">
+                      Analyse de la photo en cours...
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Détection de l'agent, de l'uniforme, qualité d'image...
+                    </p>
+                  </div>
+                ) : photoAnalysis ? (
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-medium text-blue-800 flex items-center">
+                        <FontAwesomeIcon icon={faRobot} className="mr-2" />
+                        Analyse IA - Contrôle
+                      </p>
+                      {photoAnalysis.meetsExpectations ? (
+                        <span className="text-green-600 text-sm flex items-center">
+                          <FontAwesomeIcon
+                            icon={faCircleCheck}
+                            className="mr-1"
+                          />
+                          Conforme
+                        </span>
+                      ) : (
+                        <span className="text-yellow-600 text-sm flex items-center">
+                          <FontAwesomeIcon
+                            icon={faTriangleExclamation}
+                            className="mr-1"
+                          />
+                          Vérifier
+                        </span>
+                      )}
+                    </div>
+
+                    <ul className="space-y-2 mb-4">
+                      {photoAnalysis.remarks.map(
+                        (remark: string, i: number) => {
+                          const isPositive = remark.startsWith("✅");
+                          const isWarning = remark.startsWith("⚠️");
+                          return (
+                            <li
+                              key={i}
+                              className={`text-sm flex items-center ${
+                                isPositive
+                                  ? "text-green-700"
+                                  : isWarning
+                                    ? "text-orange-700"
+                                    : "text-blue-700"
+                              }`}
+                            >
+                              <FontAwesomeIcon
+                                icon={
+                                  isPositive
+                                    ? faCircleCheck
+                                    : isWarning
+                                      ? faTriangleExclamation
+                                      : faCheck
+                                }
+                                className="mr-2 text-xs"
+                              />
+                              {remark}
+                            </li>
+                          );
+                        }
+                      )}
+                    </ul>
+
+                    <div className="grid grid-cols-4 gap-2 pt-3 border-t border-blue-200">
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Personnes</p>
+                        <p
+                          className={`text-lg font-semibold ${photoAnalysis.personCount >= 2 ? "text-green-600" : "text-orange-600"}`}
+                        >
+                          {photoAnalysis.personCount}/2
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Uniforme</p>
+                        <p
+                          className={`text-lg font-semibold ${photoAnalysis.hasUniform ? "text-green-600" : "text-red-600"}`}
+                        >
+                          {photoAnalysis.hasUniform ? "Oui" : "Non"}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Qualité</p>
+                        <p
+                          className={`text-lg font-semibold ${photoAnalysis.quality.isAcceptable ? "text-green-600" : "text-yellow-600"}`}
+                        >
+                          {photoAnalysis.quality.isAcceptable ? "OK" : "⚠️"}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Suspicion</p>
+                        <p
+                          className={`text-lg font-semibold ${photoAnalysis.suspicionScore > 50 ? "text-red-600" : "text-gray-800"}`}
+                        >
+                          {photoAnalysis.suspicionScore}/100
+                        </p>
+                      </div>
+                    </div>
+
+                    {!photoAnalysis.meetsExpectations && (
+                      <div className="mt-3 p-2 bg-yellow-50 rounded text-xs text-yellow-700">
+                        <FontAwesomeIcon icon={faLightbulb} className="mr-1" />
+                        {photoAnalysis.expectationDetails.join(" • ")}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-yellow-800 flex items-center">
+                      <FontAwesomeIcon
+                        icon={faTriangleExclamation}
+                        className="mr-2"
+                      />
+                      Analyse IA non disponible
+                    </p>
+                    <button
+                      onClick={() => analyzePhoto(photo)}
+                      className="mt-2 text-sm text-indigo-600 hover:text-indigo-800 underline"
+                    >
+                      Réessayer l'analyse
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Vous pouvez continuer sans analyse, la visite sera
+                      enregistrée normalement.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-4">
+                  <button
+                    onClick={() => {
+                      setPhoto(null);
+                      setPhotoAnalysis(null);
+                      addLog('Nouvelle capture demandée', 'info');
+                      setShowCamera(true);
+                    }}
+                    className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  >
+                    <FontAwesomeIcon icon={faCamera} className="mr-2" />
+                    Reprendre la photo
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      addLog('Photo validée, passage à l\'étape suivante', 'success');
+                      goToNextStep();
+                    }}
+                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center"
+                  >
+                    Continuer
+                    <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
+                  </button>
+                </div>
+
+                {!photoAnalysis && !isAnalyzingPhoto && (
+                  <p className="text-xs text-gray-400 text-center">
+                    ℹ️ L'analyse IA est optionnelle. Vous pouvez continuer sans
+                    analyse.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ÉTAPE GÉOLOCALISATION */}
         {currentStep === "geoloc" && (
           <div className="space-y-4">

@@ -314,32 +314,75 @@ class DashboardController extends AbstractController
             ->getQuery()
             ->getSingleScalarResult();
 
-        // Top sites (plus de présences)
-        $topSites = $this->presenceRepository->createQueryBuilder('p')
-            ->select('s.name as site, COUNT(p.id) as count')
-            ->join('p.site', 's')
-            ->where('p.checkIn >= :start')
-            ->setParameter('start', $startOfMonth)
-            ->groupBy('s.id')
-            ->orderBy('count', 'DESC')
-            ->setMaxResults(5)
+        // Rondes du jour
+        $tomorrow = new \DateTimeImmutable('tomorrow');
+        $todayRounds = $this->roundRepository->createQueryBuilder('r')
+            ->select('COUNT(r.id) as count')
+            ->where('r.scheduledStart >= :today')
+            ->andWhere('r.scheduledStart < :tomorrow')
+            ->setParameter('today', $today)
+            ->setParameter('tomorrow', $tomorrow)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        // Litiges en attente
+        $disputes = count($this->presenceRepository->findBy(['status' => Presence::STATUS_DISPUTED]));
+
+        // Présences en attente de validation
+        $pendingValidations = count($this->presenceRepository->findBy(['status' => 'PENDING']));
+
+        // Incidents ouverts
+        $openIncidents = count($this->incidentRepository->findBy(['status' => ['OPEN', 'IN_PROGRESS']]));
+
+        // Dernières présences du jour
+        $recentPresencesEntities = $this->presenceRepository->createQueryBuilder('p')
+            ->leftJoin('p.agent', 'a')
+            ->leftJoin('p.site', 's')
+            ->addSelect('a', 's')
+            ->where('p.checkIn >= :today')
+            ->andWhere('p.checkIn < :tomorrow')
+            ->setParameter('today', $today)
+            ->setParameter('tomorrow', $tomorrow)
+            ->orderBy('p.checkIn', 'DESC')
+            ->setMaxResults(10)
             ->getQuery()
             ->getResult();
 
+        $recentPresences = array_map(fn($p) => [
+            'id' => $p->getId(),
+            'agent' => $p->getAgent() ? ['id' => $p->getAgent()->getId(), 'fullName' => $p->getAgent()->getFullName()] : null,
+            'site' => ['id' => $p->getSite()->getId(), 'name' => $p->getSite()->getName()],
+            'checkIn' => $p->getCheckIn()->format('c'),
+            'status' => $p->getStatus(),
+        ], $recentPresencesEntities);
+
+        // Incidents récents
+        $recentIncidentEntities = $this->incidentRepository->findBy(
+            ['status' => ['OPEN', 'IN_PROGRESS']],
+            ['reportedAt' => 'DESC'],
+            5
+        );
+        $recentIncidents = array_map(fn($i) => [
+            'id' => $i->getId(),
+            'title' => $i->getTitle(),
+            'severity' => $i->getSeverity(),
+            'site' => ['name' => $i->getSite()->getName()],
+            'reportedAt' => $i->getReportedAt()->format('c'),
+        ], $recentIncidentEntities);
+
+        $totalSites = count($this->siteRepository->findAll());
+
         return $this->json([
-            'stats' => [
-                'totalAgents' => $totalAgents,
-                'activeAgents' => $activeAgents,
-                'todayPresences' => (int) $todayPresences,
-                'monthIncidents' => (int) $monthIncidents,
-                'monthHours' => round((float) $monthHours, 1),
-            ],
-            'topSites' => $topSites,
-            'pendingApprovals' => [
-                'presences' => count($this->presenceRepository->findBy(['status' => 'PENDING'])),
-                'timesheets' => count($this->timesheetRepository->findBy(['status' => 'PENDING'])),
-            ],
-            'openIncidents' => count($this->incidentRepository->findBy(['status' => ['OPEN', 'IN_PROGRESS']])),
+            'totalAgents' => $totalAgents,
+            'activeAgents' => $activeAgents,
+            'totalSites' => $totalSites,
+            'todayPresences' => (int) $todayPresences,
+            'pendingValidations' => $pendingValidations,
+            'openIncidents' => $openIncidents,
+            'disputes' => $disputes,
+            'todayRounds' => (int) $todayRounds,
+            'recentPresences' => $recentPresences,
+            'recentIncidents' => $recentIncidents,
         ]);
     }
 

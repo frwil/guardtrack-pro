@@ -3,10 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../../src/stores/authStore';
 import { dashboardService } from '../../../src/services/api/dashboard';
-import { usersService } from '../../../src/services/api/users';
-import { sitesService } from '../../../src/services/api/sites';
-import { presencesService } from '../../../src/services/api/presences';
-import { incidentsService } from '../../../src/services/api/incidents';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faUsers,
@@ -53,50 +49,43 @@ export default function SuperviseurDashboardPage() {
   const loadDashboard = async () => {
     setIsLoading(true);
     try {
-      const [dashData, presences, incidents, sites, agents] = await Promise.all([
-        dashboardService.getSuperviseur(),
-        presencesService.list({ date: new Date().toISOString().split('T')[0] }),
-        incidentsService.list({ status: 'OPEN' }),
-        sitesService.list(),
-        usersService.getAgents(),
-      ]);
-
-      // Calculer les statistiques
-      const activeAgents = agents.filter((a: any) => a.isActive).length;
-      const pendingValidations = presences.filter((p: any) => p.status === 'PENDING').length;
-      const disputes = dashData?.disputes || 0;
+      const dashData = await dashboardService.getSuperviseur();
+      if (!dashData) return;
 
       setStats({
-        totalAgents: agents.length,
-        activeAgents,
-        totalSites: sites.length,
-        pendingValidations,
-        openIncidents: incidents.length,
-        disputes,
+        totalAgents: dashData.totalAgents ?? 0,
+        activeAgents: dashData.activeAgents ?? 0,
+        totalSites: dashData.totalSites ?? 0,
+        pendingValidations: dashData.pendingValidations ?? 0,
+        openIncidents: dashData.openIncidents ?? 0,
+        disputes: dashData.disputes ?? 0,
       });
 
-      setRecentPresences(presences.slice(0, 10));
-      setRecentIncidents(incidents.slice(0, 5));
+      setRecentPresences(dashData.recentPresences ?? []);
+      setRecentIncidents(dashData.recentIncidents ?? []);
 
-      // Calculer l'activité par site
-      const siteActivity = sites.map((site: any) => {
-        const sitePresences = presences.filter((p: any) => p.site?.id === site.id);
-        return {
-          ...site,
-          presenceCount: sitePresences.length,
-          validatedCount: sitePresences.filter((p: any) => p.status === 'VALIDATED').length,
-        };
-      }).sort((a: any, b: any) => b.presenceCount - a.presenceCount).slice(0, 5);
-      
-      setSitesWithActivity(siteActivity);
+      // Activité par site calculée depuis les présences récentes
+      const presencesBySite: Record<number, { name: string; address?: string; presenceCount: number; validatedCount: number }> = {};
+      for (const p of (dashData.recentPresences ?? [])) {
+        const siteId = p.site?.id;
+        if (!siteId) continue;
+        if (!presencesBySite[siteId]) {
+          presencesBySite[siteId] = { name: p.site.name, presenceCount: 0, validatedCount: 0 };
+        }
+        presencesBySite[siteId].presenceCount++;
+        if (p.status === 'VALIDATED') presencesBySite[siteId].validatedCount++;
+      }
+      setSitesWithActivity(
+        Object.entries(presencesBySite)
+          .map(([id, data]) => ({ id: Number(id), ...data }))
+          .sort((a, b) => b.presenceCount - a.presenceCount)
+          .slice(0, 5)
+      );
 
-      // Stats du jour
-      const today = new Date().toISOString().split('T')[0];
-      const todayPresences = presences.filter((p: any) => p.checkIn?.startsWith(today));
       setTodayStats({
-        presences: todayPresences.filter((p: any) => p.status === 'VALIDATED').length,
-        absences: 0, // À calculer avec les assignations
-        rounds: dashData?.todayRounds || 0,
+        presences: dashData.todayPresences ?? 0,
+        absences: 0,
+        rounds: dashData.todayRounds ?? 0,
       });
     } catch (error) {
       console.error('Erreur de chargement:', error);

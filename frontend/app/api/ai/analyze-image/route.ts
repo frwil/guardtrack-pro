@@ -62,54 +62,31 @@ export async function POST(request: NextRequest) {
     console.log('📡 [Z.AI] Envoi de la requête à Z.AI...');
     const startTime = performance.now();
 
-    const models = ['glm-4.6v-flash', 'glm-4.6v'];
-    let response: Response | null = null;
-    let lastError = '';
-
-    for (const model of models) {
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        console.log(`📡 [Z.AI] Tentative ${attempt}/2 avec modèle ${model}...`);
-        const res = await fetch(`${ZAI_BASE_URL}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  { type: 'text', text: prompt },
-                  { type: 'image_url', image_url: { url: imageData } },
-                ],
-              },
+    const response = await fetch(`${ZAI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'glm-4.6v-flash',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: imageData } },
             ],
-            max_tokens: 500,
-            temperature: 0.1,
-          }),
-        });
+          },
+        ],
+        max_tokens: 500,
+        temperature: 0.1,
+      }),
+    });
 
-        if (res.ok) {
-          response = res;
-          break;
-        }
-
-        const errText = await res.text();
-        lastError = `Z.AI API error ${res.status} (${model}): ${errText.substring(0, 200)}`;
-        console.warn(`⚠️ [Z.AI] ${lastError}`);
-
-        // Pause 2s avant retry si 429
-        if (res.status === 429 && attempt === 1) {
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-      if (response) break;
-    }
-
-    if (!response) {
-      throw new Error(lastError);
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Z.AI API error ${response.status}: ${errText.substring(0, 200)}`);
     }
 
     const duration = Math.round(performance.now() - startTime);

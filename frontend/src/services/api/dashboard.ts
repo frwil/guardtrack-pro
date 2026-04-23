@@ -38,6 +38,7 @@ export interface SuperviseurDashboard {
   totalAgents: number;
   activeAgents: number;
   totalSites: number;
+  todayPresences: number;
   pendingValidations: number;
   openIncidents: number;
   disputes: number;
