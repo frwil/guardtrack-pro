@@ -10,6 +10,7 @@ import {
   UnifiedAnalysisResult,
 } from "../../../src/services/ai/imageAnalysis";
 import Link from "next/link";
+import { CameraCapture } from "../../../src/components/CameraCapture";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faLocationDot,
@@ -76,6 +77,7 @@ export default function AgentDashboardPage() {
   const [comment, setComment] = useState("");
   const [pinCode, setPinCode] = useState("");
   const [smartSuggestions, setSmartSuggestions] = useState<string[]>([]);
+  const [showCamera, setShowCamera] = useState(false);
 
   // États UI
   const [isLoading, setIsLoading] = useState(false);
@@ -186,77 +188,7 @@ export default function AgentDashboardPage() {
     return R * c;
   };
 
-  // Étape 2 : Capture photo (déclenchée manuellement par l'utilisateur)
-  const capturePhoto = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" },
-      });
-
-      // Créer un élément video pour la capture
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      await video.play();
-
-      // Attendre que la vidéo soit prête
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext("2d");
-      ctx?.drawImage(video, 0, 0);
-
-      const photoData = canvas.toDataURL("image/jpeg", 0.8);
-      setPhoto(photoData);
-
-      // Arrêter la caméra
-      stream.getTracks().forEach((track) => track.stop());
-
-      // Analyser la photo avec le service IA
-      await analyzePhoto(photoData);
-
-      // Générer des suggestions de commentaires
-      generateSmartSuggestions();
-      
-      // ✅ NE PAS CHANGER D'ÉTAPE AUTOMATIQUEMENT
-    } catch (error) {
-      console.error("Erreur caméra:", error);
-      setError("Impossible d'accéder à la caméra. Vérifiez les permissions.");
-    }
-  };
-
-  // Simulation de capture (pour test sans caméra)
-  const simulatePhoto = () => {
-    // Créer une image de test
-    const canvas = document.createElement("canvas");
-    canvas.width = 400;
-    canvas.height = 400;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      // Fond dégradé
-      const gradient = ctx.createLinearGradient(0, 0, 400, 400);
-      gradient.addColorStop(0, "#4f46e5");
-      gradient.addColorStop(1, "#7c3aed");
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 400, 400);
-
-      // Texte
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 24px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("📸 Agent de sécurité", 200, 180);
-      ctx.font = "16px Arial";
-      ctx.fillText("GuardTrack Pro - Photo test", 200, 230);
-      ctx.font = "14px Arial";
-      ctx.fillText(new Date().toLocaleString("fr-FR"), 200, 270);
-    }
-
-    const photoData = canvas.toDataURL("image/jpeg");
-    setPhoto(photoData);
-    analyzePhoto(photoData);
-    generateSmartSuggestions();
-  };
+  // Étape 2 : Capture photo via CameraCapture
 
   // Analyse IA de la photo - Utilise le service unifié
   const analyzePhoto = async (photoData: string) => {
@@ -617,6 +549,22 @@ export default function AgentDashboardPage() {
   // ============================================================
   return (
     <div className="space-y-6">
+      {/* Composant de capture photo plein écran */}
+      {showCamera && (
+        <CameraCapture
+          multiple={false}
+          title="Photo de pointage"
+          description="Prenez une photo de vous en tenue de travail"
+          onCapture={(_, optimized) => {
+            setPhoto(optimized.dataUrl);
+            setShowCamera(false);
+            analyzePhoto(optimized.dataUrl);
+            generateSmartSuggestions();
+          }}
+          onCancel={() => setShowCamera(false)}
+        />
+      )}
+
       {/* En-tête */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between">
@@ -889,7 +837,7 @@ export default function AgentDashboardPage() {
                   </div>
 
                   <button
-                    onClick={capturePhoto}
+                    onClick={() => setShowCamera(true)}
                     className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
                   >
                     <FontAwesomeIcon icon={faCamera} className="mr-3 text-2xl" />
@@ -900,13 +848,6 @@ export default function AgentDashboardPage() {
                     <FontAwesomeIcon icon={faShield} className="mr-1 text-gray-400" />
                     La photo est obligatoire pour le pointage
                   </p>
-
-                  <button
-                    onClick={simulatePhoto}
-                    className="text-xs text-gray-400 underline"
-                  >
-                    [Test] Simuler une photo
-                  </button>
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -921,6 +862,7 @@ export default function AgentDashboardPage() {
                       onClick={() => {
                         setPhoto(null);
                         setPhotoAnalysis(null);
+                        setShowCamera(true);
                       }}
                       className="absolute top-2 right-2 bg-white rounded-full p-2 shadow-md hover:bg-gray-100"
                       title="Reprendre la photo"

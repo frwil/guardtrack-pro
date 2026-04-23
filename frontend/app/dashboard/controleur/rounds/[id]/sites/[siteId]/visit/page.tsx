@@ -33,11 +33,11 @@ import {
   faCheck,
   faBug,
   faServer,
-  faUpload,
   faDesktop,
   faMobileAlt,
 } from "@fortawesome/free-solid-svg-icons";
 import { Html5Qrcode } from "html5-qrcode";
+import { CameraCapture } from "../../../../../../../../src/components/CameraCapture";
 
 // ✅ Ordre modifié : photo en premier
 type Step =
@@ -91,7 +91,7 @@ export default function ControllerVisitPage() {
   // ✅ Détection du type d'appareil
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showCamera, setShowCamera] = useState(false);
 
   // Scanner QR code avec html5-qrcode
   const [hasCamera, setHasCamera] = useState(true);
@@ -482,78 +482,6 @@ export default function ControllerVisitPage() {
   // ÉTAPE 4 : PHOTO (avec analyse IA contextuelle) - DÉPLACÉE EN PREMIER POUR TEST
   // ============================================================
   
-  // ✅ Capture via caméra (mobile)
-  const capturePhoto = async () => {
-    addLog('📸 Capture photo via caméra demandée', 'info');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "environment",
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      });
-
-      addLog('✅ Caméra accessible', 'success');
-
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      await video.play();
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext("2d");
-      ctx?.drawImage(video, 0, 0);
-
-      const photoData = canvas.toDataURL("image/jpeg", 0.8);
-      setPhoto(photoData);
-      addLog(`✅ Photo capturée (${Math.round(photoData.length / 1024)} KB)`, 'success');
-
-      stream.getTracks().forEach((track) => track.stop());
-
-      analyzePhoto(photoData);
-    } catch (error) {
-      addLog(`❌ Erreur caméra: ${error}`, 'error');
-      console.error("Erreur caméra:", error);
-      setError("Impossible d'accéder à la caméra. Vérifiez les permissions.");
-    }
-  };
-
-  // ✅ Sélection de fichier (ordinateur)
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    addLog(`📁 Fichier sélectionné: ${file.name} (${Math.round(file.size / 1024)} KB)`, 'info');
-
-    // Vérifier le type de fichier
-    if (!file.type.startsWith('image/')) {
-      addLog('❌ Le fichier sélectionné n\'est pas une image', 'error');
-      setError("Veuillez sélectionner une image valide");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const photoData = e.target?.result as string;
-      setPhoto(photoData);
-      addLog(`✅ Photo chargée depuis le fichier`, 'success');
-      analyzePhoto(photoData);
-    };
-    reader.onerror = () => {
-      addLog('❌ Erreur lors de la lecture du fichier', 'error');
-      setError("Erreur lors de la lecture du fichier");
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const triggerFileSelect = () => {
-    fileInputRef.current?.click();
-  };
-
   const simulatePhoto = () => {
     addLog('🎭 Simulation de photo (test)', 'warning');
     const canvas = document.createElement("canvas");
@@ -738,14 +666,21 @@ export default function ControllerVisitPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Input file caché pour la sélection de fichier */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/jpg,image/webp,image/bmp"
-        onChange={handleFileSelect}
-        className="hidden"
-      />
+      {/* Composant de capture photo plein écran */}
+      {showCamera && (
+        <CameraCapture
+          multiple={false}
+          title="Photo de visite"
+          description="Contrôleur + agent en tenue"
+          onCapture={(_, optimized) => {
+            setPhoto(optimized.dataUrl);
+            setShowCamera(false);
+            addLog(`✅ Photo capturée via CameraCapture (${Math.round(optimized.dataUrl.length / 1024)} KB)`, 'success');
+            analyzePhoto(optimized.dataUrl);
+          }}
+          onCancel={() => setShowCamera(false)}
+        />
+      )}
 
       {/* ✅ Panneau de débogage */}
       {showDebug && (
@@ -902,49 +837,13 @@ export default function ControllerVisitPage() {
 
             {!photo ? (
               <div className="text-center py-8 space-y-4">
-                {/* ✅ Option caméra pour mobile/tablette */}
-                {(isMobile || isTablet) && (
-                  <button
-                    onClick={capturePhoto}
-                    className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
-                  >
-                    <FontAwesomeIcon icon={faCamera} className="mr-3 text-2xl" />
-                    Prendre une photo
-                  </button>
-                )}
-                
-                {/* ✅ Option upload pour ordinateur */}
-                {(!isMobile && !isTablet) && (
-                  <button
-                    onClick={triggerFileSelect}
-                    className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
-                  >
-                    <FontAwesomeIcon icon={faUpload} className="mr-3 text-2xl" />
-                    Sélectionner une photo
-                  </button>
-                )}
-                
-                {/* ✅ Option alternative pour chaque type d'appareil */}
-                <div className="border-t border-gray-200 pt-4">
-                  <p className="text-sm text-gray-500 mb-2">Autre option :</p>
-                  {isMobile || isTablet ? (
-                    <button
-                      onClick={triggerFileSelect}
-                      className="text-indigo-600 hover:text-indigo-800 underline text-sm"
-                    >
-                      <FontAwesomeIcon icon={faUpload} className="mr-1" />
-                      Importer depuis la galerie
-                    </button>
-                  ) : (
-                    <button
-                      onClick={capturePhoto}
-                      className="text-indigo-600 hover:text-indigo-800 underline text-sm"
-                    >
-                      <FontAwesomeIcon icon={faCamera} className="mr-1" />
-                      Utiliser la webcam
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={() => setShowCamera(true)}
+                  className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
+                >
+                  <FontAwesomeIcon icon={faCamera} className="mr-3 text-2xl" />
+                  Prendre une photo
+                </button>
                 
                 <p className="text-sm text-gray-500 flex items-center justify-center">
                   <FontAwesomeIcon
@@ -1136,6 +1035,7 @@ export default function ControllerVisitPage() {
                       setPhoto(null);
                       setPhotoAnalysis(null);
                       addLog('Nouvelle capture demandée', 'info');
+                      setShowCamera(true);
                     }}
                     className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
                   >
