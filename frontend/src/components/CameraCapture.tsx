@@ -138,23 +138,23 @@ export function CameraCapture({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black flex flex-col" style={{ height: '100dvh' }}>
       {/* En-tête */}
-      <div className="bg-gray-900 text-white p-4 flex items-center justify-between">
-        <button onClick={onCancel} className="text-white">
+      <div className="bg-gray-900 text-white p-4 flex items-center justify-between flex-shrink-0">
+        <button onClick={onCancel} className="text-white p-2">
           <FontAwesomeIcon icon={faTimes} size="lg" />
         </button>
         <div className="text-center">
           <h2 className="font-semibold">{title}</h2>
           <p className="text-sm text-gray-400">{description}</p>
         </div>
-        <div className="w-8"></div>
+        <div className="w-10"></div>
       </div>
 
       {/* Zone de capture */}
-      <div className="flex-1 relative bg-black">
+      <div className="flex-1 relative bg-black min-h-0">
         {error ? (
-          <div className="absolute inset-0 flex items-center justify-center text-white">
+          <div className="absolute inset-0 flex items-center justify-center text-white p-6">
             <p className="text-center">{error}</p>
           </div>
         ) : (
@@ -164,6 +164,7 @@ export function CameraCapture({
               className="w-full h-full object-cover"
               playsInline
               muted
+              autoPlay
             />
             
             {/* Indicateur d'optimisation */}
@@ -192,7 +193,7 @@ export function CameraCapture({
 
       {/* Miniatures des photos capturées (mode multiple) */}
       {multiple && capturedPhotos.length > 0 && (
-        <div className="bg-gray-900 p-2">
+        <div className="bg-gray-900 p-2 flex-shrink-0">
           <div className="flex gap-2 overflow-x-auto">
             {capturedPhotos.map((photo, index) => (
               <div key={index} className="relative flex-shrink-0">
@@ -215,46 +216,53 @@ export function CameraCapture({
       )}
 
       {/* Barre de contrôle */}
-      <div className="bg-gray-900 text-white p-6">
-        <div className="flex items-center justify-center gap-6">
+      <div className="bg-gray-900 text-white flex-shrink-0" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+        <div className="flex items-center justify-between px-8 pt-5 pb-2">
+          {/* Bouton retourner caméra */}
           <button
             onClick={switchCamera}
-            className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center hover:bg-gray-600"
+            className="w-14 h-14 bg-gray-700 rounded-full flex items-center justify-center hover:bg-gray-600 active:bg-gray-500"
             disabled={isOptimizing}
+            title="Changer de caméra"
           >
-            <FontAwesomeIcon icon={faRotate} />
+            <FontAwesomeIcon icon={faRotate} size="lg" />
           </button>
-          
+
+          {/* Bouton capture — toujours centré et bien visible */}
           <button
             onClick={capturePhoto}
-            className="w-20 h-20 bg-white rounded-full flex items-center justify-center hover:bg-gray-200 disabled:opacity-50"
+            className="w-20 h-20 rounded-full flex items-center justify-center disabled:opacity-40 transition-transform active:scale-95"
+            style={{ background: 'white', border: '4px solid rgba(255,255,255,0.4)', boxShadow: '0 0 0 2px white' }}
             disabled={isOptimizing || (multiple && capturedPhotos.length >= maxPhotos)}
+            title="Capturer"
           >
-            <FontAwesomeIcon icon={faCamera} className="text-gray-900 text-3xl" />
+            {isOptimizing
+              ? <FontAwesomeIcon icon={faSpinner} spin className="text-gray-900 text-2xl" />
+              : <FontAwesomeIcon icon={faCamera} className="text-gray-900 text-3xl" />
+            }
           </button>
-          
-          {multiple && capturedPhotos.length > 0 && (
+
+          {/* Bouton valider (mode multiple) ou espace vide */}
+          {multiple && capturedPhotos.length > 0 ? (
             <button
               onClick={validateMultiple}
-              className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center hover:bg-green-500"
+              className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center hover:bg-green-500 active:bg-green-400"
               disabled={isOptimizing}
+              title={`Valider (${capturedPhotos.length} photo${capturedPhotos.length > 1 ? 's' : ''})`}
             >
-              <FontAwesomeIcon icon={faCheck} />
+              <FontAwesomeIcon icon={faCheck} size="lg" />
             </button>
+          ) : (
+            <div className="w-14 h-14" />
           )}
         </div>
-        
-        {multiple && (
-          <p className="text-center text-sm text-gray-400 mt-3">
-            {capturedPhotos.length}/{maxPhotos} photo{capturedPhotos.length > 1 ? 's' : ''}
-          </p>
-        )}
-      </div>
 
-      {/* Astuce */}
-      <div className="bg-gray-800 text-gray-400 p-3 text-center text-sm">
-        <FontAwesomeIcon icon={faLightbulb} className="mr-1 text-yellow-500" />
-        Les photos sont automatiquement optimisées pour économiser de l'espace
+        <p className="text-center text-xs text-gray-400 pb-2">
+          {multiple
+            ? `${capturedPhotos.length}/${maxPhotos} photo${capturedPhotos.length > 1 ? 's' : ''} — Appuyez sur ✓ pour valider`
+            : 'Appuyez sur le bouton pour capturer'
+          }
+        </p>
       </div>
     </div>
   );
