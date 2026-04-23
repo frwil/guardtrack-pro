@@ -855,12 +855,12 @@ export default function ControllerVisitPage() {
                     : "La photo est optionnelle mais recommandée"}
                 </p>
 
-                <button
+                {/* <button
                   onClick={simulatePhoto}
                   className="text-xs text-gray-400 underline mt-4"
                 >
                   [Test] Simuler une photo
-                </button>
+                </button> */}
 
                 {!isStepRequired("photo") && (
                   <button
