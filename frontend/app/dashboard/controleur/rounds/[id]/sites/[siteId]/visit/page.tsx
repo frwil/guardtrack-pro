@@ -35,16 +35,16 @@ import {
   faServer,
   faDesktop,
   faMobileAlt,
-  faFolderOpen,
 } from "@fortawesome/free-solid-svg-icons";
 import { Html5Qrcode } from "html5-qrcode";
 import { CameraCapture } from "../../../../../../../../src/components/CameraCapture";
 
+// ✅ Ordre modifié : photo en premier
 type Step =
+  | "photo"
   | "geoloc"
   | "qr"
   | "pin"
-  | "photo"
   | "presence"
   | "comments"
   | "summary";
@@ -58,7 +58,8 @@ export default function ControllerVisitPage() {
   // Store d'authentification
   const { user, loginWithPin, error: authError } = useAuthStore();
 
-  const [currentStep, setCurrentStep] = useState<Step>("geoloc");
+  // ✅ Étape initiale = photo (pour test)
+  const [currentStep, setCurrentStep] = useState<Step>("photo");
   const [roundSite, setRoundSite] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,15 +74,21 @@ export default function ControllerVisitPage() {
   const [pinCode, setPinCode] = useState("");
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
-  const [photoSource, setPhotoSource] = useState<"camera" | "gallery" | null>(null); // ✅ Source de la photo
-  const [photoAnalysis, setPhotoAnalysis] = useState<EnhancedAnalysisResult | null>(null);
+  const [photoAnalysis, setPhotoAnalysis] =
+    useState<EnhancedAnalysisResult | null>(null);
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
-  const [agentPresenceStatus, setAgentPresenceStatus] = useState<"PRESENT" | "ABSENT" | null>(null);
+  const [agentPresenceStatus, setAgentPresenceStatus] = useState<
+    "PRESENT" | "ABSENT" | null
+  >(null);
   const [absenceReason, setAbsenceReason] = useState("");
   const [comments, setComments] = useState("");
   const [aiProvider, setAiProvider] = useState<string>("lightweight");
 
-  // Détection du type d'appareil
+  // ✅ États pour les logs de débogage
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(true);
+
+  // ✅ Détection du type d'appareil
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
@@ -96,9 +103,17 @@ export default function ControllerVisitPage() {
 
   // Rayon de géorepérage (depuis les settings ou défaut)
   const geofencingRadius = appSettings?.security?.geofencingRadius || 100;
-  const offSiteThreshold = 50;
+  const offSiteThreshold = 50; // Seuil "Hors site" en mètres
 
-  // Détection du type d'appareil
+  // ✅ Fonction pour ajouter un log
+  const addLog = (message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') => {
+    const timestamp = new Date().toLocaleTimeString('fr-FR');
+    const prefix = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+    setDebugLogs(prev => [...prev, `[${timestamp}] ${prefix} ${message}`].slice(-30));
+    console.log(`[DEBUG] ${message}`);
+  };
+
+  // ✅ Détection du type d'appareil
   useEffect(() => {
     const detectDevice = () => {
       const userAgent = navigator.userAgent.toLowerCase();
@@ -108,6 +123,8 @@ export default function ControllerVisitPage() {
       
       setIsMobile(isMobileDevice);
       setIsTablet(isTabletDevice);
+      
+      addLog(`Appareil détecté: ${isMobileDevice ? 'Mobile' : isTabletDevice ? 'Tablette' : 'Ordinateur'}`, 'info');
     };
     
     detectDevice();
@@ -117,6 +134,8 @@ export default function ControllerVisitPage() {
     loadRoundSite();
     initializeAIService();
     loadSettings();
+
+    addLog('Page de visite chargée - MODE DÉBOGAGE (Photo en premier)', 'info');
 
     return () => {
       stopScanner();
@@ -141,33 +160,40 @@ export default function ControllerVisitPage() {
 
   const loadSettings = async () => {
     try {
+      addLog('Chargement des paramètres...', 'info');
       const settings = await settingsService.getSettings();
       setAppSettings(settings);
+      addLog(`Paramètres chargés - Provider IA: ${settings?.ai?.provider || 'lightweight'}`, 'success');
     } catch (error) {
+      addLog(`Erreur chargement paramètres: ${error}`, 'error');
       console.error("Erreur chargement paramètres:", error);
     }
   };
 
   const initializeAIService = async () => {
     try {
+      addLog('Initialisation du service IA...', 'info');
       await imageAnalysisEnhancedService.initialize();
 
+      // Auto-détection Z.AI : si la clé serveur est présente, on force le provider
       try {
         const testRes = await fetch('/api/ai/analyze-image');
         const testData = await testRes.json();
         if (testData.hasKey) {
           await imageAnalysisEnhancedService.setProvider('zai');
           setAiProvider('zai');
+          addLog('Z.AI détecté et activé automatiquement', 'success');
           return;
         }
       } catch {
-        // Fallback silencieux
+        addLog('Test Z.AI échoué, utilisation du provider configuré', 'warning');
       }
 
       const provider = imageAnalysisEnhancedService.getCurrentProvider();
       setAiProvider(provider);
+      addLog(`Service IA initialisé - Provider actif: ${provider}`, 'success');
     } catch (error) {
-      console.error("Erreur initialisation IA:", error);
+      addLog(`Erreur initialisation IA: ${error}`, 'error');
     }
   };
 
@@ -176,11 +202,14 @@ export default function ControllerVisitPage() {
       const round = await roundsService.getById(roundId);
       const site = round?.sites?.find((s: any) => s.site?.id === siteId);
       setRoundSite(site);
+      addLog(`Site chargé: ${site?.site?.name}`, 'success');
     } catch (error) {
+      addLog(`Erreur chargement ronde: ${error}`, 'error');
       console.error("Erreur chargement ronde:", error);
     }
   };
 
+  // Vérifier si une étape est obligatoire selon les settings
   const isStepRequired = (step: Step): boolean => {
     if (!appSettings) return true;
     
@@ -196,8 +225,9 @@ export default function ControllerVisitPage() {
     }
   };
 
+  // Obtenir les étapes actives (en fonction des settings)
   const getActiveSteps = (): Step[] => {
-    const allSteps: Step[] = ["geoloc", "qr", "pin", "photo", "presence", "comments", "summary"];
+    const allSteps: Step[] = ["photo", "geoloc", "qr", "pin", "presence", "comments", "summary"];
     
     return allSteps.filter(step => {
       if (step === "geoloc" && !isStepRequired("geoloc")) return false;
@@ -207,15 +237,18 @@ export default function ControllerVisitPage() {
     });
   };
 
+  // Passer à l'étape suivante en tenant compte des étapes désactivées
   const goToNextStep = () => {
     const activeSteps = getActiveSteps();
     const currentIndex = activeSteps.indexOf(currentStep);
     
     if (currentIndex < activeSteps.length - 1) {
       setCurrentStep(activeSteps[currentIndex + 1]);
+      addLog(`Passage à l'étape: ${activeSteps[currentIndex + 1]}`, 'info');
     }
   };
 
+  // Revenir à l'étape précédente
   const goToPreviousStep = () => {
     const activeSteps = getActiveSteps();
     const currentIndex = activeSteps.indexOf(currentStep);
@@ -255,11 +288,13 @@ export default function ControllerVisitPage() {
           withinGeofence: distance <= geofencingRadius,
         });
         setIsLoading(false);
+        addLog(`GPS obtenu - Distance: ${distance.toFixed(0)}m`, 'success');
       },
       (error) => {
         console.error("Erreur GPS:", error);
         setGeolocation(null);
         setIsLoading(false);
+        addLog(`Erreur GPS: ${error.message}`, 'error');
       }
     );
   };
@@ -356,6 +391,7 @@ export default function ControllerVisitPage() {
       if (qrData.siteId === siteId) {
         setQrValidated(true);
         setError(null);
+        addLog('✅ QR Code valide', 'success');
 
         stopScanner();
 
@@ -365,10 +401,14 @@ export default function ControllerVisitPage() {
       } else {
         setQrValidated(false);
         setError(`QR code incorrect`);
+        addLog('❌ QR Code incorrect', 'error');
       }
     } catch (err) {
       setQrValidated(false);
-      setError("Format de QR code invalide. Assurez-vous de scanner le QR code affiché sur le site.");
+      setError(
+        "Format de QR code invalide. Assurez-vous de scanner le QR code affiché sur le site."
+      );
+      addLog('❌ Format QR Code invalide', 'error');
     }
   };
 
@@ -421,22 +461,25 @@ export default function ControllerVisitPage() {
       const success = await loginWithPin(user.email, pinCode);
 
       if (success) {
+        addLog('✅ PIN vérifié', 'success');
         goToNextStep();
       } else {
         setError(authError || "Code PIN incorrect");
         setPinCode("");
+        addLog('❌ PIN incorrect', 'error');
       }
     } catch (error) {
       console.error("Erreur vérification PIN:", error);
       setError("Erreur lors de la vérification du PIN");
       setPinCode("");
+      addLog(`❌ Erreur vérification PIN: ${error}`, 'error');
     } finally {
       setIsVerifyingPin(false);
     }
   };
 
   // ============================================================
-  // ÉTAPE 4 : PHOTO (avec analyse IA contextuelle)
+  // ÉTAPE 4 : PHOTO (avec analyse IA contextuelle) - DÉPLACÉE EN PREMIER POUR TEST
   // ============================================================
   
   const simulatePhoto = () => {
@@ -470,8 +513,12 @@ export default function ControllerVisitPage() {
 
   const analyzePhoto = async (photoData: string) => {
     setIsAnalyzingPhoto(true);
+    addLog(`🔍 Début analyse IA - Provider configuré: ${appSettings?.ai?.provider || 'inconnu'}`, 'info');
+    addLog(`🔍 Provider actif: ${aiProvider}`, 'info');
 
     try {
+      const startTime = performance.now();
+      
       const analysis = await imageAnalysisEnhancedService.analyzeImage(
         photoData,
         {
@@ -481,12 +528,23 @@ export default function ControllerVisitPage() {
         }
       );
       
+      const duration = Math.round(performance.now() - startTime);
+      
       setPhotoAnalysis(analysis);
       setAiProvider(analysis.provider);
       
-    } catch (error: any) {
-      console.error("Erreur analyse:", error);
+      addLog(`✅ Analyse terminée en ${duration}ms`, 'success');
+      addLog(`📊 Provider utilisé: ${analysis.provider}`, analysis.provider === 'zai' ? 'success' : 'warning');
+      addLog(`📊 Personnes détectées: ${analysis.personCount}/2`, analysis.personCount >= 2 ? 'success' : 'warning');
+      addLog(`📊 Uniforme: ${analysis.hasUniform ? 'Oui' : 'Non'} (${Math.round(analysis.uniformConfidence * 100)}%)`, analysis.hasUniform ? 'success' : 'warning');
+      addLog(`📊 Score suspicion: ${analysis.suspicionScore}/100`, analysis.suspicionScore > 50 ? 'warning' : 'info');
       
+    } catch (error: any) {
+      addLog(`❌ Erreur Z.AI: ${error?.message || error}`, 'error');
+      addLog('🔄 Fallback vers analyse locale (lightweight)', 'warning');
+      console.error("Erreur analyse Z.AI:", error);
+
+      // Fallback explicite vers lightweight
       try {
         const { lightweightAnalyzer } = await import('../../../../../../../../src/services/ai/lightweightAnalysis');
         const fallback = await lightweightAnalyzer.analyzeImage(photoData);
@@ -502,7 +560,7 @@ export default function ControllerVisitPage() {
         } as any);
         setAiProvider('lightweight');
       } catch (fallbackError) {
-        console.error("Erreur fallback:", fallbackError);
+        addLog(`❌ Erreur fallback: ${fallbackError}`, 'error');
       }
     } finally {
       setIsAnalyzingPhoto(false);
@@ -510,8 +568,18 @@ export default function ControllerVisitPage() {
   };
 
   const presenceOptions = [
-    { value: "PRESENT", label: "✅ Agent présent", icon: faUserCheck, color: "bg-green-100 border-green-500" },
-    { value: "ABSENT", label: "❌ Agent absent", icon: faUserXmark, color: "bg-red-100 border-red-500" },
+    {
+      value: "PRESENT",
+      label: "✅ Agent présent",
+      icon: faUserCheck,
+      color: "bg-green-100 border-green-500",
+    },
+    {
+      value: "ABSENT",
+      label: "❌ Agent absent",
+      icon: faUserXmark,
+      color: "bg-red-100 border-red-500",
+    },
   ];
 
   const absenceReasons = [
@@ -543,13 +611,6 @@ export default function ControllerVisitPage() {
         return;
       }
 
-      // ✅ Ajouter la source de la photo dans les commentaires si nécessaire
-      let finalComments = comments?.trim() || "";
-      if (photo && photoSource === "gallery") {
-        const sourceNote = "📁 Photo importée depuis la galerie.";
-        finalComments = finalComments ? `${finalComments}\n${sourceNote}` : sourceNote;
-      }
-
       const visitData = {
         gpsLatitude: geolocation?.latitude ?? undefined,
         gpsLongitude: geolocation?.longitude ?? undefined,
@@ -558,16 +619,24 @@ export default function ControllerVisitPage() {
         photo: isStepRequired("photo") ? (photo ?? undefined) : undefined,
         photoAnalysis: photoAnalysis ?? undefined,
         agentPresenceStatus: agentPresenceStatus,
-        absenceReason: agentPresenceStatus === "ABSENT" ? absenceReason || undefined : undefined,
-        comments: finalComments || undefined,
+        absenceReason:
+          agentPresenceStatus === "ABSENT"
+            ? absenceReason || undefined
+            : undefined,
+        comments: comments?.trim() || undefined,
         distanceFromSite: geolocation?.distance ?? undefined,
       };
 
+      addLog('📤 Envoi des données de visite...', 'info');
+      console.log("Données envoyées:", visitData);
+
       await roundsService.controllerVisitSite(roundId, siteId, visitData);
+      addLog('✅ Visite enregistrée avec succès', 'success');
       router.push(`/dashboard/controleur/rounds/${roundId}`);
     } catch (error) {
       console.error("Erreur soumission:", error);
       setError("Erreur lors de l'enregistrement");
+      addLog(`❌ Erreur soumission: ${error}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -577,13 +646,14 @@ export default function ControllerVisitPage() {
   // RENDU
   // ============================================================
   
+  // Labels pour la barre de progression (filtrés selon settings) - ORDRE MODIFIÉ
   const getStepLabels = () => {
     const labels: { label: string; step: Step }[] = [];
     
+    if (isStepRequired("photo")) labels.push({ label: "📸", step: "photo" });
     if (isStepRequired("geoloc")) labels.push({ label: "GPS", step: "geoloc" });
     labels.push({ label: "QR", step: "qr" });
     if (isStepRequired("pin")) labels.push({ label: "PIN", step: "pin" });
-    if (isStepRequired("photo")) labels.push({ label: "📸", step: "photo" });
     labels.push({ label: "👤", step: "presence" });
     labels.push({ label: "💬", step: "comments" });
     labels.push({ label: "✅", step: "summary" });
@@ -612,6 +682,92 @@ export default function ControllerVisitPage() {
         />
       )}
 
+      {/* ✅ Panneau de débogage */}
+      {showDebug && (
+        <div className="bg-gray-900 text-white rounded-lg shadow p-4 text-xs font-mono">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold flex items-center">
+              <FontAwesomeIcon icon={faBug} className="mr-2 text-yellow-400" />
+              Console de débogage - Analyse IA
+            </h3>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setDebugLogs([])}
+                className="px-2 py-1 bg-gray-700 rounded text-white hover:bg-gray-600"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setShowDebug(false)}
+                className="px-2 py-1 bg-gray-700 rounded text-white hover:bg-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          
+          {/* Informations de configuration */}
+          <div className="mb-2 p-2 bg-gray-800 rounded">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <span className="text-gray-400">Provider configuré:</span>
+                <span className="ml-2 text-yellow-400 font-bold">
+                  {appSettings?.ai?.provider?.toUpperCase() || 'Chargement...'}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400">Provider actif:</span>
+                <span className={`ml-2 font-bold ${aiProvider === 'zai' ? 'text-green-400' : 'text-yellow-400'}`}>
+                  {aiProvider?.toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400">Z.AI activé:</span>
+                <span className={`ml-2 ${appSettings?.ai?.providers?.find((p: any) => p.id === 'zai')?.enabled ? 'text-green-400' : 'text-red-400'}`}>
+                  {appSettings?.ai?.providers?.find((p: any) => p.id === 'zai')?.enabled ? 'OUI' : 'NON'}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400">API Key Z.AI:</span>
+                <span className={`ml-2 ${appSettings?.ai?.providers?.find((p: any) => p.id === 'zai')?.apiKey ? 'text-green-400' : 'text-red-400'}`}>
+                  {appSettings?.ai?.providers?.find((p: any) => p.id === 'zai')?.apiKey ? 'Configurée' : 'Manquante'}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400">Type d'appareil:</span>
+                <span className="ml-2 text-blue-400">
+                  <FontAwesomeIcon icon={isMobile || isTablet ? faMobileAlt : faDesktop} className="mr-1" />
+                  {isMobile ? 'Mobile' : isTablet ? 'Tablette' : 'Ordinateur'}
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Logs */}
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {debugLogs.length === 0 ? (
+              <p className="text-gray-500 italic">Aucun log pour le moment...</p>
+            ) : (
+              debugLogs.map((log, i) => (
+                <div key={i} className="border-b border-gray-700 pb-1 last:border-0">
+                  {log}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bouton pour réafficher le panneau si fermé */}
+      {!showDebug && (
+        <button
+          onClick={() => setShowDebug(true)}
+          className="fixed bottom-4 right-4 z-50 bg-gray-900 text-white p-3 rounded-full shadow-lg hover:bg-gray-800"
+        >
+          <FontAwesomeIcon icon={faBug} />
+        </button>
+      )}
+
       {/* Barre de progression dynamique */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex items-center justify-between">
@@ -635,6 +791,22 @@ export default function ControllerVisitPage() {
           })}
         </div>
       </div>
+
+      {/* Indicateur du provider IA */}
+      {appSettings?.ai?.provider && currentStep === "photo" && (
+        <div className="bg-white rounded-lg shadow p-3">
+          <p className="text-xs text-gray-500 flex items-center justify-between">
+            <span className="flex items-center">
+              <FontAwesomeIcon icon={faRobot} className="mr-1" />
+              IA configurée : {appSettings.ai.provider.toUpperCase()}
+            </span>
+            <span className={`flex items-center ${aiProvider === 'zai' ? 'text-green-600' : 'text-yellow-600'}`}>
+              <FontAwesomeIcon icon={faServer} className="mr-1" />
+              IA active : {aiProvider.toUpperCase()}
+            </span>
+          </p>
+        </div>
+      )}
 
       {/* Contenu de l'étape */}
       <div className="bg-white rounded-lg shadow p-6">
@@ -898,10 +1070,15 @@ export default function ControllerVisitPage() {
         {currentStep === "geoloc" && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold flex items-center">
-              <FontAwesomeIcon icon={faLocationDot} className="mr-2 text-indigo-600" />
+              <FontAwesomeIcon
+                icon={faLocationDot}
+                className="mr-2 text-indigo-600"
+              />
               Géolocalisation
               {!isStepRequired("geoloc") && (
-                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Optionnel</span>
+                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                  Optionnel
+                </span>
               )}
             </h2>
             
@@ -912,26 +1089,43 @@ export default function ControllerVisitPage() {
                   disabled={isLoading}
                   className="w-full py-3 bg-indigo-600 text-white rounded-lg"
                 >
-                  {isLoading ? <FontAwesomeIcon icon={faSpinner} spin /> : "Obtenir ma position"}
+                  {isLoading ? (
+                    <FontAwesomeIcon icon={faSpinner} spin />
+                  ) : (
+                    "Obtenir ma position"
+                  )}
                 </button>
                 
                 {!isStepRequired("geoloc") && (
-                  <button onClick={goToNextStep} className="w-full py-2 text-gray-500 underline text-sm">
+                  <button
+                    onClick={goToNextStep}
+                    className="w-full py-2 text-gray-500 underline text-sm"
+                  >
                     Passer cette étape
                   </button>
                 )}
               </>
             ) : (
               <>
-                <div className={`p-4 rounded-lg ${geolocation.withinGeofence ? "bg-green-50" : "bg-yellow-50"}`}>
+                <div
+                  className={`p-4 rounded-lg ${geolocation.withinGeofence ? "bg-green-50" : "bg-yellow-50"}`}
+                >
                   <p className="flex items-center">
                     Distance : {geolocation.distance?.toFixed(0)} m
                     {geolocation.distance > offSiteThreshold && (
-                      <span className="ml-2 px-2 py-0.5 bg-orange-200 text-orange-800 text-xs rounded-full">⚠️ Hors site</span>
+                      <span className="ml-2 px-2 py-0.5 bg-orange-200 text-orange-800 text-xs rounded-full">
+                        ⚠️ Hors site
+                      </span>
                     )}
                   </p>
-                  <p>{geolocation.withinGeofence ? "✅ Dans la zone" : "⚠️ Hors zone"}</p>
-                  <p className="text-xs text-gray-500 mt-1">Rayon configuré : {geofencingRadius}m</p>
+                  <p>
+                    {geolocation.withinGeofence
+                      ? "✅ Dans la zone"
+                      : "⚠️ Hors zone"}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Rayon configuré : {geofencingRadius}m
+                  </p>
                 </div>
                 
                 {geolocation.distance > offSiteThreshold && (
@@ -943,9 +1137,19 @@ export default function ControllerVisitPage() {
                   </div>
                 )}
                 
-                <div className="flex justify-end">
-                  <button onClick={goToNextStep} className="px-6 py-2 bg-indigo-600 text-white rounded-lg">
-                    Continuer <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
+                <div className="flex justify-between">
+                  <button
+                    onClick={goToPreviousStep}
+                    className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  >
+                    <FontAwesomeIcon icon={faArrowLeft} className="mr-2" /> Retour
+                  </button>
+                  <button
+                    onClick={goToNextStep}
+                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg"
+                  >
+                    Continuer{" "}
+                    <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
                   </button>
                 </div>
               </>
@@ -957,19 +1161,31 @@ export default function ControllerVisitPage() {
         {currentStep === "qr" && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold flex items-center">
-              <FontAwesomeIcon icon={faQrcode} className="mr-2 text-indigo-600" />
+              <FontAwesomeIcon
+                icon={faQrcode}
+                className="mr-2 text-indigo-600"
+              />
               Scan QR Code
             </h2>
 
-            <p className="text-sm text-gray-600">Scannez le QR code affiché sur le site</p>
+            <p className="text-sm text-gray-600">
+              Scannez le QR code affiché sur le site
+            </p>
 
             {hasCamera ? (
               <div className="space-y-3">
-                <div id={scannerContainerId} className="w-full rounded-lg overflow-hidden bg-black" style={{ minHeight: "300px" }} />
+                <div
+                  id={scannerContainerId}
+                  className="w-full rounded-lg overflow-hidden bg-black"
+                  style={{ minHeight: "300px" }}
+                />
 
                 {cameras.length > 1 && (
                   <div className="flex justify-center">
-                    <button onClick={switchCamera} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                    <button
+                      onClick={switchCamera}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                    >
                       <FontAwesomeIcon icon={faRotate} className="mr-2" />
                       Changer de caméra
                     </button>
@@ -985,18 +1201,29 @@ export default function ControllerVisitPage() {
               </div>
             ) : (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-                <FontAwesomeIcon icon={faCamera} className="text-3xl text-yellow-600 mb-2" />
+                <FontAwesomeIcon
+                  icon={faCamera}
+                  className="text-3xl text-yellow-600 mb-2"
+                />
                 <p className="text-yellow-800">Caméra non disponible</p>
-                <p className="text-sm text-yellow-600 mt-1">Veuillez vérifier les permissions de la caméra</p>
+                <p className="text-sm text-yellow-600 mt-1">
+                  Veuillez vérifier les permissions de la caméra
+                </p>
               </div>
             )}
 
             {qrCode && (
-              <div className={`p-3 rounded-lg ${qrValidated ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+              <div
+                className={`p-3 rounded-lg ${qrValidated ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}
+              >
                 {qrValidated ? (
-                  <p className="text-green-600 text-sm mt-1">✅ QR Code valide - Redirection...</p>
+                  <p className="text-green-600 text-sm mt-1">
+                    ✅ QR Code valide - Redirection...
+                  </p>
                 ) : (
-                  <p className="text-red-600 text-sm mt-1">❌ QR Code invalide pour ce site</p>
+                  <p className="text-red-600 text-sm mt-1">
+                    ❌ QR Code invalide pour ce site
+                  </p>
                 )}
               </div>
             )}
@@ -1024,11 +1251,15 @@ export default function ControllerVisitPage() {
               <FontAwesomeIcon icon={faKey} className="mr-2 text-indigo-600" />
               Code PIN contrôleur
               {!isStepRequired("pin") && (
-                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Optionnel</span>
+                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                  Optionnel
+                </span>
               )}
             </h2>
 
-            <p className="text-sm text-gray-600">Entrez votre code PIN à 5 chiffres pour continuer</p>
+            <p className="text-sm text-gray-600">
+              Entrez votre code PIN à 5 chiffres pour continuer
+            </p>
 
             <div className="flex justify-center">
               <input
@@ -1043,7 +1274,11 @@ export default function ControllerVisitPage() {
                   setError(null);
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && pinCode.length === 5 && !isVerifyingPin) {
+                  if (
+                    e.key === "Enter" &&
+                    pinCode.length === 5 &&
+                    !isVerifyingPin
+                  ) {
                     verifyPin();
                   }
                 }}
@@ -1071,11 +1306,15 @@ export default function ControllerVisitPage() {
                 disabled={isVerifyingPin}
                 className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
               >
-                <FontAwesomeIcon icon={faArrowLeft} className="mr-2" /> Retour
+                <FontAwesomeIcon icon={faArrowLeft} className="mr-2" />
+                Retour
               </button>
 
               {!isStepRequired("pin") && (
-                <button onClick={goToNextStep} className="px-4 py-2 text-gray-500 underline text-sm">
+                <button
+                  onClick={goToNextStep}
+                  className="px-4 py-2 text-gray-500 underline text-sm"
+                >
                   Passer cette étape
                 </button>
               )}
@@ -1101,213 +1340,6 @@ export default function ControllerVisitPage() {
           </div>
         )}
 
-        {/* ÉTAPE PHOTO */}
-        {currentStep === "photo" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold flex items-center">
-              <FontAwesomeIcon icon={faCamera} className="mr-2 text-indigo-600" />
-              Photo de vérification
-              {!isStepRequired("photo") && (
-                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Optionnel</span>
-              )}
-            </h2>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800 flex items-center">
-                <FontAwesomeIcon icon={faLightbulb} className="mr-2" />
-                {isMobile || isTablet 
-                  ? "Prenez une photo montrant l'agent en tenue de travail"
-                  : "Sélectionnez une photo montrant l'agent en tenue de travail"}
-              </p>
-            </div>
-
-            {!photo ? (
-              <div className="text-center py-8 space-y-4">
-                {/* Option caméra pour mobile/tablette */}
-                {(isMobile || isTablet) && (
-                  <button
-                    onClick={capturePhoto}
-                    className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
-                  >
-                    <FontAwesomeIcon icon={faCamera} className="mr-3 text-2xl" />
-                    Prendre une photo
-                  </button>
-                )}
-                
-                {/* ✅ Option upload pour ordinateur UNIQUEMENT */}
-                {(!isMobile && !isTablet) && (
-                  <button
-                    onClick={triggerFileSelect}
-                    className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
-                  >
-                    <FontAwesomeIcon icon={faFolderOpen} className="mr-3 text-2xl" />
-                    Sélectionner une photo
-                  </button>
-                )}
-                
-                <p className="text-sm text-gray-500 flex items-center justify-center">
-                  <FontAwesomeIcon icon={faShield} className="mr-1 text-gray-400" />
-                  {isStepRequired("photo") 
-                    ? "La photo est obligatoire pour valider la visite"
-                    : "La photo est optionnelle mais recommandée"}
-                </p>
-
-                {!isStepRequired("photo") && (
-                  <button onClick={goToNextStep} className="w-full py-2 text-gray-500 underline text-sm">
-                    Passer cette étape
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="relative">
-                  <img src={photo} alt="Capture" className="w-full max-w-md mx-auto rounded-lg shadow-md" />
-                  <button
-                    onClick={() => {
-                      setPhoto(null);
-                      setPhotoAnalysis(null);
-                      setPhotoSource(null);
-                    }}
-                    className="absolute top-2 right-2 bg-white rounded-full p-2 shadow-md hover:bg-gray-100"
-                    title="Reprendre la photo"
-                  >
-                    <FontAwesomeIcon icon={faRotate} />
-                  </button>
-                </div>
-                
-                {/* ✅ Indicateur de source de la photo */}
-                {photoSource === "gallery" && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
-                    <p className="text-blue-800 text-xs flex items-center">
-                      <FontAwesomeIcon icon={faFolderOpen} className="mr-1" />
-                      Photo importée depuis la galerie
-                    </p>
-                  </div>
-                )}
-
-                {isAnalyzingPhoto ? (
-                  <div className="text-center py-6 bg-blue-50 rounded-lg">
-                    <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-indigo-600 mb-3" />
-                    <p className="text-gray-700 font-medium">Analyse de la photo en cours...</p>
-                    <p className="text-sm text-gray-500 mt-1">Détection de l'agent, de l'uniforme, qualité d'image...</p>
-                  </div>
-                ) : photoAnalysis ? (
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="font-medium text-blue-800 flex items-center">
-                        <FontAwesomeIcon icon={faRobot} className="mr-2" />
-                        Analyse IA - Contrôle
-                      </p>
-                      {photoAnalysis.meetsExpectations ? (
-                        <span className="text-green-600 text-sm flex items-center">
-                          <FontAwesomeIcon icon={faCircleCheck} className="mr-1" /> Conforme
-                        </span>
-                      ) : (
-                        <span className="text-yellow-600 text-sm flex items-center">
-                          <FontAwesomeIcon icon={faTriangleExclamation} className="mr-1" /> Vérifier
-                        </span>
-                      )}
-                    </div>
-
-                    <ul className="space-y-2 mb-4">
-                      {photoAnalysis.remarks.map((remark: string, i: number) => {
-                        const isPositive = remark.startsWith("✅");
-                        const isWarning = remark.startsWith("⚠️");
-                        return (
-                          <li key={i} className={`text-sm flex items-center ${isPositive ? "text-green-700" : isWarning ? "text-orange-700" : "text-blue-700"}`}>
-                            <FontAwesomeIcon
-                              icon={isPositive ? faCircleCheck : isWarning ? faTriangleExclamation : faCheck}
-                              className="mr-2 text-xs"
-                            />
-                            {remark}
-                          </li>
-                        );
-                      })}
-                    </ul>
-
-                    <div className="grid grid-cols-4 gap-2 pt-3 border-t border-blue-200">
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500">Personnes</p>
-                        <p className={`text-lg font-semibold ${photoAnalysis.personCount >= 2 ? "text-green-600" : "text-orange-600"}`}>
-                          {photoAnalysis.personCount}/2
-                        </p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500">Uniforme</p>
-                        <p className={`text-lg font-semibold ${photoAnalysis.hasUniform ? "text-green-600" : "text-red-600"}`}>
-                          {photoAnalysis.hasUniform ? "Oui" : "Non"}
-                        </p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500">Qualité</p>
-                        <p className={`text-lg font-semibold ${photoAnalysis.quality.isAcceptable ? "text-green-600" : "text-yellow-600"}`}>
-                          {photoAnalysis.quality.isAcceptable ? "OK" : "⚠️"}
-                        </p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500">Suspicion</p>
-                        <p className={`text-lg font-semibold ${photoAnalysis.suspicionScore > 50 ? "text-red-600" : "text-gray-800"}`}>
-                          {photoAnalysis.suspicionScore}/100
-                        </p>
-                      </div>
-                    </div>
-
-                    {!photoAnalysis.meetsExpectations && (
-                      <div className="mt-3 p-2 bg-yellow-50 rounded text-xs text-yellow-700">
-                        <FontAwesomeIcon icon={faLightbulb} className="mr-1" />
-                        {photoAnalysis.expectationDetails.join(" • ")}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <p className="text-yellow-800 flex items-center">
-                      <FontAwesomeIcon icon={faTriangleExclamation} className="mr-2" />
-                      Analyse IA non disponible
-                    </p>
-                    <button onClick={() => analyzePhoto(photo)} className="mt-2 text-sm text-indigo-600 hover:text-indigo-800 underline">
-                      Réessayer l'analyse
-                    </button>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Vous pouvez continuer sans analyse, la visite sera enregistrée normalement.
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex justify-between pt-4">
-                  <button
-                    onClick={() => {
-                      setPhoto(null);
-                      setPhotoAnalysis(null);
-                      setPhotoSource(null);
-                    }}
-                    className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
-                  >
-                    <FontAwesomeIcon icon={faCamera} className="mr-2" />
-                    Reprendre la photo
-                  </button>
-
-                  <button onClick={goToNextStep} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center">
-                    Continuer <FontAwesomeIcon icon={faArrowRight} className="ml-2" />
-                  </button>
-                </div>
-
-                {!photoAnalysis && !isAnalyzingPhoto && (
-                  <p className="text-xs text-gray-400 text-center">
-                    ℹ️ L'analyse IA est optionnelle. Vous pouvez continuer sans analyse.
-                  </p>
-                )}
-              </div>
-            )}
-            
-            <div className="flex justify-start pt-2">
-              <button onClick={goToPreviousStep} className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">
-                <FontAwesomeIcon icon={faArrowLeft} className="mr-2" /> Retour
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* ÉTAPE PRESENCE */}
         {currentStep === "presence" && (
           <div className="space-y-4">
@@ -1327,7 +1359,9 @@ export default function ControllerVisitPage() {
 
             {agentPresenceStatus === "ABSENT" && (
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-2">Raison de l'absence</label>
+                <label className="block text-sm font-medium mb-2">
+                  Raison de l'absence
+                </label>
                 <select
                   value={absenceReason}
                   onChange={(e) => setAbsenceReason(e.target.value)}
@@ -1335,19 +1369,27 @@ export default function ControllerVisitPage() {
                 >
                   <option value="">Sélectionnez une raison</option>
                   {absenceReasons.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
                   ))}
                 </select>
               </div>
             )}
 
             <div className="flex justify-between">
-              <button onClick={goToPreviousStep} className="px-4 py-2 bg-gray-100 rounded-lg">
+              <button
+                onClick={goToPreviousStep}
+                className="px-4 py-2 bg-gray-100 rounded-lg"
+              >
                 <FontAwesomeIcon icon={faArrowLeft} /> Retour
               </button>
               <button
                 onClick={goToNextStep}
-                disabled={!agentPresenceStatus || (agentPresenceStatus === "ABSENT" && !absenceReason)}
+                disabled={
+                  !agentPresenceStatus ||
+                  (agentPresenceStatus === "ABSENT" && !absenceReason)
+                }
                 className="px-6 py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50"
               >
                 Continuer
@@ -1371,10 +1413,16 @@ export default function ControllerVisitPage() {
               placeholder="Ajoutez vos observations..."
             />
             <div className="flex justify-between">
-              <button onClick={goToPreviousStep} className="px-4 py-2 bg-gray-100 rounded-lg">
+              <button
+                onClick={goToPreviousStep}
+                className="px-4 py-2 bg-gray-100 rounded-lg"
+              >
                 <FontAwesomeIcon icon={faArrowLeft} /> Retour
               </button>
-              <button onClick={goToNextStep} className="px-6 py-2 bg-indigo-600 text-white rounded-lg">
+              <button
+                onClick={goToNextStep}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-lg"
+              >
                 Continuer
               </button>
             </div>
@@ -1385,7 +1433,10 @@ export default function ControllerVisitPage() {
         {currentStep === "summary" && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold flex items-center">
-              <FontAwesomeIcon icon={faClipboardCheck} className="mr-2 text-green-600" />
+              <FontAwesomeIcon
+                icon={faClipboardCheck}
+                className="mr-2 text-green-600"
+              />
               Résumé de la visite
             </h2>
 
@@ -1399,7 +1450,9 @@ export default function ControllerVisitPage() {
             )}
 
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <p><strong>Site :</strong> {roundSite?.site?.name}</p>
+              <p>
+                <strong>Site :</strong> {roundSite?.site?.name}
+              </p>
               <p className="flex items-center">
                 <strong>GPS :</strong>{" "}
                 {geolocation ? (
@@ -1411,39 +1464,60 @@ export default function ControllerVisitPage() {
                         Hors site (&gt;{offSiteThreshold}m)
                       </span>
                     ) : (
-                      <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">✅ Dans la zone</span>
+                      <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                        ✅ Dans la zone
+                      </span>
                     )}
                   </span>
                 ) : (
                   <span className="ml-1 text-gray-500">Non disponible</span>
                 )}
               </p>
-              <p><strong>QR Code :</strong> {qrValidated ? <span className="text-green-600">✅ Validé</span> : <span className="text-red-600">❌ Non validé</span>}</p>
+              <p>
+                <strong>QR Code :</strong>{" "}
+                {qrValidated ? (
+                  <span className="text-green-600">✅ Validé</span>
+                ) : (
+                  <span className="text-red-600">❌ Non validé</span>
+                )}
+              </p>
               <p>
                 <strong>Photo :</strong>{" "}
                 {photo ? (
                   <span className="flex items-center">
                     <span className="text-green-600">✅ Capturée</span>
-                    {photoSource === "gallery" && (
-                      <span className="ml-2 text-xs text-blue-600">(depuis galerie)</span>
-                    )}
                     {photoAnalysis && (
-                      <span className={`ml-2 text-xs ${photoAnalysis.meetsExpectations ? "text-green-600" : "text-yellow-600"}`}>
-                        ({photoAnalysis.meetsExpectations ? "Analyse OK" : "À vérifier"})
+                      <span
+                        className={`ml-2 text-xs ${photoAnalysis.meetsExpectations ? "text-green-600" : "text-yellow-600"}`}
+                      >
+                        ({photoAnalysis.meetsExpectations
+                          ? "Analyse OK"
+                          : "À vérifier"})
                       </span>
                     )}
                   </span>
                 ) : (
-                  <span className="text-gray-500">{isStepRequired("photo") ? "❌ Non capturée" : "⏭️ Non fournie (optionnel)"}</span>
+                  <span className="text-gray-500">
+                    {isStepRequired("photo") ? "❌ Non capturée" : "⏭️ Non fournie (optionnel)"}
+                  </span>
                 )}
               </p>
-              <p><strong>Statut agent :</strong> {agentPresenceStatus === "PRESENT" ? <span className="text-green-600">✅ Présent</span> : <span className="text-red-600">❌ Absent</span>}</p>
-              {agentPresenceStatus === "ABSENT" && <p><strong>Raison :</strong> {absenceReason}</p>}
-              {comments && <p><strong>Commentaires :</strong> {comments}</p>}
-              {photo && photoSource === "gallery" && !comments?.includes("Photo importée") && (
-                <p className="text-xs text-blue-600 mt-1">
-                  <FontAwesomeIcon icon={faFolderOpen} className="mr-1" />
-                  Note : Photo importée depuis la galerie
+              <p>
+                <strong>Statut agent :</strong>{" "}
+                {agentPresenceStatus === "PRESENT" ? (
+                  <span className="text-green-600">✅ Présent</span>
+                ) : (
+                  <span className="text-red-600">❌ Absent</span>
+                )}
+              </p>
+              {agentPresenceStatus === "ABSENT" && (
+                <p>
+                  <strong>Raison :</strong> {absenceReason}
+                </p>
+              )}
+              {comments && (
+                <p>
+                  <strong>Commentaires :</strong> {comments}
                 </p>
               )}
             </div>
@@ -1451,11 +1525,22 @@ export default function ControllerVisitPage() {
             {error && <p className="text-red-600">{error}</p>}
 
             <div className="flex justify-between">
-              <button onClick={goToPreviousStep} className="px-4 py-2 bg-gray-100 rounded-lg">
+              <button
+                onClick={goToPreviousStep}
+                className="px-4 py-2 bg-gray-100 rounded-lg"
+              >
                 <FontAwesomeIcon icon={faArrowLeft} /> Retour
               </button>
-              <button onClick={handleSubmit} disabled={isLoading} className="px-8 py-3 bg-green-600 text-white rounded-lg">
-                {isLoading ? <FontAwesomeIcon icon={faSpinner} spin /> : "Valider la visite"}
+              <button
+                onClick={handleSubmit}
+                disabled={isLoading}
+                className="px-8 py-3 bg-green-600 text-white rounded-lg"
+              >
+                {isLoading ? (
+                  <FontAwesomeIcon icon={faSpinner} spin />
+                ) : (
+                  "Valider la visite"
+                )}
               </button>
             </div>
           </div>

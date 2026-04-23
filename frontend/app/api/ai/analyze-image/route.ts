@@ -4,8 +4,9 @@ const ZAI_BASE_URL = 'https://api.z.ai/api/paas/v4';
 
 export async function POST(request: NextRequest) {
   console.log('📡 [Z.AI] ========== NOUVELLE REQUÊTE ==========');
-
+  
   try {
+    // ✅ LIRE LE CORPS BRUT AVANT DE PARSER
     let rawBody: string;
     try {
       rawBody = await request.text();
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
+    
     if (!rawBody || rawBody.length === 0) {
       console.error('❌ [Z.AI] Corps de requête vide');
       return NextResponse.json(
@@ -25,23 +26,26 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
+    
+    // ✅ PARSER LE JSON
     let body: any;
     try {
       body = JSON.parse(rawBody);
     } catch (parseError: any) {
       console.error('❌ [Z.AI] Erreur parsing JSON:', parseError.message);
+      console.error('❌ [Z.AI] Raw body (premiers 100 chars):', rawBody.substring(0, 100));
+      console.error('❌ [Z.AI] Raw body (derniers 100 chars):', rawBody.substring(Math.max(0, rawBody.length - 100)));
       return NextResponse.json(
         { error: 'Invalid JSON in request body', fallback: true },
         { status: 400 }
       );
     }
-
+    
     const { imageData, context } = body;
-
+    
     console.log('📡 [Z.AI] Contexte:', context);
     console.log('📡 [Z.AI] Image data reçue:', imageData ? `${Math.round(imageData.length / 1024)} KB` : 'NULL');
-
+    
     if (!imageData) {
       console.error('❌ [Z.AI] Pas d\'image fournie');
       return NextResponse.json(
@@ -95,7 +99,8 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
     console.log('📡 [Z.AI] Contenu brut:', content?.substring(0, 200) + '...');
-
+    
+    // Parser la réponse JSON
     let result;
     try {
       const cleanContent = content?.replace(/```json\n?|\n?```/g, '').trim() || '{}';
@@ -122,27 +127,35 @@ export async function POST(request: NextRequest) {
       success: true,
       provider: 'zai',
       ...result,
-      remarks: [...(result.remarks || []), '🤖 Analyse par Z.AI (GLM-4.6V-Flash)'],
+      remarks: [...(result.remarks || []), '🤖 Analyse par Z.AI (GLM-4.6V)'],
     });
 
   } catch (error: any) {
     console.error('❌ [Z.AI] ========== ERREUR ==========');
     console.error('❌ [Z.AI] Message:', error.message);
+    console.error('❌ [Z.AI] Stack:', error.stack);
+    
+    if (error.message?.includes('API key') || error.message?.includes('authentication')) {
+      console.error('❌ [Z.AI] Erreur d\'authentification - Vérifier ZAI_API_KEY');
+    }
+    
     console.error('❌ [Z.AI] ========== FIN ERREUR ==========');
-
+    
     return NextResponse.json(
-      {
-        success: false,
+      { 
+        success: false, 
         error: error.message,
-        fallback: true
+        fallback: true 
       },
       { status: 500 }
     );
   }
 }
 
-// Route de test pour vérifier la configuration
+// ✅ Route de test pour vérifier la configuration
 export async function GET() {
+  console.log('📡 [Z.AI] Test de configuration...');
+  
   return NextResponse.json({
     hasKey: !!process.env.ZAI_API_KEY,
     keyLength: process.env.ZAI_API_KEY?.length || 0,
