@@ -288,11 +288,24 @@ class DashboardController extends AbstractController
         $totalAgents = count($this->userRepository->findByRole(User::ROLE_AGENT));
         $activeAgents = count($this->userRepository->findActiveAgents());
 
+        $tomorrow = new \DateTimeImmutable('tomorrow');
+        $sevenDaysAgo = new \DateTimeImmutable('-7 days midnight');
+
         // Présences du jour
         $todayPresences = $this->presenceRepository->createQueryBuilder('p')
             ->select('COUNT(p.id) as count')
             ->where('p.checkIn >= :today')
+            ->andWhere('p.checkIn < :tomorrow')
             ->setParameter('today', $today)
+            ->setParameter('tomorrow', $tomorrow)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        // Présences des 7 derniers jours (fallback si aucune présence aujourd'hui)
+        $weekPresences = $this->presenceRepository->createQueryBuilder('p')
+            ->select('COUNT(p.id) as count')
+            ->where('p.checkIn >= :sevenDaysAgo')
+            ->setParameter('sevenDaysAgo', $sevenDaysAgo)
             ->getQuery()
             ->getSingleScalarResult();
 
@@ -315,7 +328,6 @@ class DashboardController extends AbstractController
             ->getSingleScalarResult();
 
         // Rondes du jour
-        $tomorrow = new \DateTimeImmutable('tomorrow');
         $todayRounds = $this->roundRepository->createQueryBuilder('r')
             ->select('COUNT(r.id) as count')
             ->where('r.scheduledStart >= :today')
@@ -334,15 +346,13 @@ class DashboardController extends AbstractController
         // Incidents ouverts
         $openIncidents = count($this->incidentRepository->findBy(['status' => ['OPEN', 'IN_PROGRESS']]));
 
-        // Dernières présences du jour
+        // Dernières présences (7 derniers jours pour éviter un affichage vide)
         $recentPresencesEntities = $this->presenceRepository->createQueryBuilder('p')
             ->leftJoin('p.agent', 'a')
             ->leftJoin('p.site', 's')
             ->addSelect('a', 's')
-            ->where('p.checkIn >= :today')
-            ->andWhere('p.checkIn < :tomorrow')
-            ->setParameter('today', $today)
-            ->setParameter('tomorrow', $tomorrow)
+            ->where('p.checkIn >= :sevenDaysAgo')
+            ->setParameter('sevenDaysAgo', $sevenDaysAgo)
             ->orderBy('p.checkIn', 'DESC')
             ->setMaxResults(10)
             ->getQuery()
@@ -377,6 +387,7 @@ class DashboardController extends AbstractController
             'activeAgents' => $activeAgents,
             'totalSites' => $totalSites,
             'todayPresences' => (int) $todayPresences,
+            'weekPresences' => (int) $weekPresences,
             'pendingValidations' => $pendingValidations,
             'openIncidents' => $openIncidents,
             'disputes' => $disputes,
