@@ -145,7 +145,7 @@ export default function SuperviseurDashboardPage() {
           </div>
           <button
             onClick={loadDashboard}
-            className="px-4 py-2 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition-colors flex items-center"
+            className="px-4 py-2 bg-white text-indigo-700 rounded-lg hover:bg-gray-100 transition-colors flex items-center shadow-md"
           >
             <FontAwesomeIcon icon={faRotate} className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Actualiser
