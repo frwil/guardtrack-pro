@@ -6,6 +6,7 @@ use App\Entity\Assignment;
 use App\Entity\User;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
+use Symfony\Component\Security\Core\Authorization\Voter\Vote;
 
 class AssignmentVoter extends Voter
 {
@@ -29,7 +30,7 @@ class AssignmentVoter extends Voter
         return $subject instanceof Assignment;
     }
 
-    protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token): bool
+    protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
     {
         /** @var User $currentUser */
         $currentUser = $token->getUser();

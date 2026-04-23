@@ -1,4 +1,5 @@
 parameters:
+    pusher_cluster_default: 'eu'
 
 services:
     _defaults:
@@ -12,12 +13,15 @@ services:
             - '../src/Entity/'
             - '../src/Kernel.php'
 
-    # Make core services public for testing and direct access
-    security.password_hasher:
-        public: true
-
     Doctrine\ORM\EntityManagerInterface:
         public: true
 
     Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface:
         public: true
+
+    App\Service\PusherService:
+        arguments:
+            $appId:     '%env(default::PUSHER_APP_ID)%'
+            $appKey:    '%env(default::PUSHER_APP_KEY)%'
+            $appSecret: '%env(default::PUSHER_APP_SECRET)%'
+            $cluster:   '%env(default:pusher_cluster_default:PUSHER_APP_CLUSTER)%'

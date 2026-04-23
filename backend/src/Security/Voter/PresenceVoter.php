@@ -6,6 +6,7 @@ use App\Entity\Presence;
 use App\Entity\User;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
+use Symfony\Component\Security\Core\Authorization\Voter\Vote;
 
 class PresenceVoter extends Voter
 {
@@ -30,7 +31,7 @@ class PresenceVoter extends Voter
         return $subject instanceof Presence;
     }
 
-    protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token): bool
+    protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
     {
         /** @var User $currentUser */
         $currentUser = $token->getUser();
