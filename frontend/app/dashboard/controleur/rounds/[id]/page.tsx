@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { roundsService } from "../../../../../src/services/api/rounds";
 import { sitesService } from "../../../../../src/services/api/sites";
+import { useChat } from "../../../../../src/hooks/useChat";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faArrowLeft,
@@ -25,6 +26,7 @@ import {
   faSearch,
   faTimes,
   faBan,
+  faComment,
 } from "@fortawesome/free-solid-svg-icons";
 
 export default function ControllerRoundDetailPage() {
@@ -46,6 +48,9 @@ export default function ControllerRoundDetailPage() {
   const [filteredSites, setFilteredSites] = useState<any[]>([]);
   const [selectedSites, setSelectedSites] = useState<number[]>([]);
   const [isLoadingSites, setIsLoadingSites] = useState(false);
+
+  // ✅ Hook de chat
+  const { getRoundConversation, setCurrentConversation } = useChat();
 
   useEffect(() => {
     loadRound();
@@ -196,6 +201,18 @@ export default function ControllerRoundDetailPage() {
     );
   };
 
+  // ✅ Ouvrir le chat de la ronde
+  const openRoundChat = async () => {
+    try {
+      const conversation = await getRoundConversation(roundId);
+      setCurrentConversation(conversation);
+      // Le widget de chat s'ouvrira automatiquement ou peut être ouvert via un état global
+    } catch (error) {
+      console.error("Erreur ouverture chat:", error);
+      setError("Erreur lors de l'ouverture du chat");
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { color: string; text: string; icon: any }> = {
       PLANNED: { color: "bg-blue-100 text-blue-800", text: "Planifiée", icon: faCalendar },
@@ -269,6 +286,15 @@ export default function ControllerRoundDetailPage() {
             <FontAwesomeIcon icon={faMapLocationDot} className="mr-2" />
             Afficher sur la carte
           </Link>
+          
+          {/* ✅ Bouton Chat de la ronde */}
+          <button
+            onClick={openRoundChat}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <FontAwesomeIcon icon={faComment} className="mr-2" />
+            Chat
+          </button>
           
           {/* ✅ Bouton Ajouter des sites */}
           {canAddSites && (

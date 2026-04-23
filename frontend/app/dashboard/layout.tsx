@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "../../src/stores/authStore";
 import { networkMonitor } from "../../src/services/network/monitor";
 import { NotificationBell } from "../../src/components/NotificationBell";
+import { ChatWidget } from "../../src/components/ChatWidget";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faRotate, faSignOutAlt, faUser } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
@@ -118,7 +119,7 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      {/* Contenu principal - AJOUT DE pb-20 SUR MOBILE */}
+      {/* Contenu principal */}
       <main
         className={`lg:ml-64 p-4 lg:p-8 pb-25 lg:pb-8 ${networkStatus !== "online" && networkStatus !== undefined ? "pt-12" : ""}`}
       >
@@ -164,6 +165,9 @@ export default function DashboardLayout({
           ))}
         </div>
       </nav>
+
+      {/* ✅ Widget de chat - AJOUTÉ ICI */}
+      <ChatWidget />
     </div>
   );
 }
