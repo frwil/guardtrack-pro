@@ -164,11 +164,5 @@ export async function GET() {
   });
 }
 
-// ✅ Configuration pour augmenter la limite de taille du body
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
-  },
-};
+export const maxDuration = 30;
+export const dynamic = 'force-dynamic';
