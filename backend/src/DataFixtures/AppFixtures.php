@@ -179,17 +179,18 @@ class AppFixtures extends Fixture
         $assignment3->setStatus('ACTIVE');
         $manager->persist($assignment3);
 
-        // 5. Timesheets (Planning/Feuilles de temps) - 7 jours de données
-        $this->createTimesheetsForAgent($manager, $agent1, $site1, '2026-04-01', 7);
-        $this->createTimesheetsForAgent($manager, $agent2, $site2, '2026-04-01', 7);
-        $this->createTimesheetsForAgent($manager, $agent3, $site3, '2026-04-01', 7);
+        // 5. Timesheets (Planning/Feuilles de temps) - 7 derniers jours
+        $sevenDaysAgo = (new \DateTimeImmutable('today'))->modify('-6 days')->format('Y-m-d');
+        $this->createTimesheetsForAgent($manager, $agent1, $site1, $sevenDaysAgo, 7);
+        $this->createTimesheetsForAgent($manager, $agent2, $site2, $sevenDaysAgo, 7);
+        $this->createTimesheetsForAgent($manager, $agent3, $site3, $sevenDaysAgo, 7);
 
-        // 6. Présences (pointages) pour test
+        // 6. Présences (pointages) pour test — dates relatives pour toujours avoir des données aujourd'hui
         $presence1 = new Presence();
         $presence1->setAgent($agent1);
         $presence1->setSite($site1);
         $presence1->setAssignment($assignment1);
-        $presence1->setCheckIn(new \DateTimeImmutable('2026-04-10 08:05:00'));
+        $presence1->setCheckIn(new \DateTimeImmutable('today 08:05:00'));
         $presence1->setStatus('PENDING');
         $presence1->setSuspicionScore(15);
         $manager->persist($presence1);
@@ -198,21 +199,21 @@ class AppFixtures extends Fixture
         $presence2->setAgent($agent2);
         $presence2->setSite($site2);
         $presence2->setAssignment($assignment2);
-        $presence2->setCheckIn(new \DateTimeImmutable('2026-04-10 08:10:00'));
+        $presence2->setCheckIn(new \DateTimeImmutable('today 08:10:00'));
         $presence2->setStatus('PENDING');
         $presence2->setSuspicionScore(45);
         $manager->persist($presence2);
 
-        // Présence validée (historique)
+        // Présence validée (hier — historique)
         $presence3 = new Presence();
         $presence3->setAgent($agent1);
         $presence3->setSite($site1);
         $presence3->setAssignment($assignment1);
-        $presence3->setCheckIn(new \DateTimeImmutable('2026-04-09 08:00:00'));
-        $presence3->setCheckOut(new \DateTimeImmutable('2026-04-09 17:00:00'));
+        $presence3->setCheckIn(new \DateTimeImmutable('yesterday 08:00:00'));
+        $presence3->setCheckOut(new \DateTimeImmutable('yesterday 17:00:00'));
         $presence3->setStatus('VALIDATED');
         $presence3->setValidator($controleur);
-        $presence3->setValidationDate(new \DateTimeImmutable('2026-04-09 17:30:00'));
+        $presence3->setValidationDate(new \DateTimeImmutable('yesterday 17:30:00'));
         $presence3->setSuspicionScore(10);
         $manager->persist($presence3);
 

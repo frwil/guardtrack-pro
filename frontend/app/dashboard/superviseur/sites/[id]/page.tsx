@@ -28,6 +28,20 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 
+// ✅ Fonction pour générer le contenu du QR code au format JSON
+const getQrCodeContent = (siteId: number, qrCode: string | null): string => {
+  return JSON.stringify({
+    siteId: siteId,
+    siteCode: qrCode || '',
+  });
+};
+
+// ✅ Fonction pour générer l'URL de l'image QR code
+const getQrCodeUrl = (siteId: number, qrCode: string | null, size: number = 200): string => {
+  const content = getQrCodeContent(siteId, qrCode);
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(content)}`;
+};
+
 interface SiteStats {
   totalAssignments: number;
   activeAssignments: number;
@@ -72,7 +86,6 @@ export default function SuperviseurSiteDetailPage() {
       setAssignments(assignmentsData);
       setChildren(childrenData);
 
-      // Calculer les statistiques
       setStats({
         totalAssignments: assignmentsData.length,
         activeAssignments: assignmentsData.filter((a: any) => 
@@ -126,6 +139,19 @@ export default function SuperviseurSiteDetailPage() {
     'PARKING': '🅿️ Parking',
     'BUREAU': '📋 Bureau',
     'AUTRE': '📍 Autre',
+  };
+
+  // ✅ Fonction pour télécharger le QR code
+  const handleDownloadQrCode = () => {
+    if (!site) return;
+    
+    const content = getQrCodeContent(site.id, site.qrCode);
+    const url = getQrCodeUrl(site.id, site.qrCode, 300);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `qr-code-${site.name.replace(/\s+/g, '-').toLowerCase()}.png`;
+    link.click();
   };
 
   if (isLoading) {
@@ -320,12 +346,14 @@ export default function SuperviseurSiteDetailPage() {
                     <>
                       <div className="bg-white p-3 rounded-lg inline-block mb-3">
                         <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${site.qrCode}`}
+                          src={getQrCodeUrl(site.id, site.qrCode, 150)}
                           alt="QR Code"
                           className="w-32 h-32"
                         />
                       </div>
-                      <p className="text-xs text-gray-500 break-all">{site.qrCode}</p>
+                      <p className="text-xs text-gray-500 break-all">
+                        {getQrCodeContent(site.id, site.qrCode)}
+                      </p>
                     </>
                   ) : (
                     <p className="text-gray-500">Aucun QR Code généré</p>
@@ -463,22 +491,19 @@ export default function SuperviseurSiteDetailPage() {
                 <>
                   <div className="bg-gray-100 p-6 rounded-lg inline-block mb-4">
                     <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${site.qrCode}`}
+                      src={getQrCodeUrl(site.id, site.qrCode, 300)}
                       alt="QR Code"
                       className="w-64 h-64"
                     />
                   </div>
-                  <p className="text-lg font-mono mb-2">{site.qrCode}</p>
+                  <p className="text-lg font-mono mb-2">
+                    {getQrCodeContent(site.id, site.qrCode)}
+                  </p>
                   <p className="text-sm text-gray-500">
                     Scannez ce QR code pour pointer sur ce site
                   </p>
                   <button
-                    onClick={() => {
-                      const link = document.createElement('a');
-                      link.href = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${site.qrCode}`;
-                      link.download = `qr-code-${site.name}.png`;
-                      link.click();
-                    }}
+                    onClick={handleDownloadQrCode}
                     className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                   >
                     Télécharger le QR Code
@@ -501,13 +526,13 @@ export default function SuperviseurSiteDetailPage() {
             </h2>
             <div className="bg-gray-100 p-4 rounded-lg mb-4">
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${site.qrCode}`}
+                src={getQrCodeUrl(site.id, site.qrCode, 200)}
                 alt="QR Code"
                 className="mx-auto"
               />
             </div>
             <p className="text-sm text-gray-500 mb-4 break-all">
-              {site.qrCode}
+              {getQrCodeContent(site.id, site.qrCode)}
             </p>
             <button
               onClick={() => setShowQrModal(false)}
