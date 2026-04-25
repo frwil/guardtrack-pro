@@ -45,7 +45,11 @@ class SiteController extends AbstractController
         return $this->json(array_map(fn(Site $s) => [
             'id' => $s->getId(),
             'name' => $s->getName(),
-            'client' => $s->getClient()->getName(),
+            // ✅ Retourner un objet client au lieu d'une chaîne
+            'client' => [
+                'id' => $s->getClient()->getId(),
+                'name' => $s->getClient()->getName(),
+            ],
             'type' => $s->getType(),
             'address' => $s->getAddress(),
             'latitude' => $s->getLatitude(),

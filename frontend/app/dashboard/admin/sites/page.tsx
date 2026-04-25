@@ -417,7 +417,7 @@ export default function AdminSitesPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {site.client?.name || "N/A"}
+                      {typeof site.client === 'string' ? site.client : site.client?.name || "N/A"}
                     </td>
                     <td className="px-6 py-4">
                       <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs">
