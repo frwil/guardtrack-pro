@@ -4,6 +4,7 @@ export interface Site {
   id: number;
   name: string;
   client: { id: number; name: string };
+  parent?: { id: number; name: string } | null;
   type: string;
   address: string;
   latitude: string | null;

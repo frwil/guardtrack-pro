@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useAuthStore } from '../../../../../src/stores/authStore';
 import { sitesService, CreateSiteData, Site } from '../../../../../src/services/api/sites';
 import { clientsService } from '../../../../../src/services/api/clients';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -15,6 +16,7 @@ import {
   faLocationDot,
   faCircle,
   faInfoCircle,
+  faTrash,
 } from '@fortawesome/free-solid-svg-icons';
 
 interface Client {
@@ -25,11 +27,14 @@ interface Client {
 export default function CreateEditSitePage() {
   const router = useRouter();
   const params = useParams();
+  const { user } = useAuthStore();
   const siteId = params.id ? parseInt(params.id as string) : null;
   const isEdit = !!siteId;
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [parentSites, setParentSites] = useState<Site[]>([]);
   const [formData, setFormData] = useState<CreateSiteData>({
@@ -46,6 +51,7 @@ export default function CreateEditSitePage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [useGeolocation, setUseGeolocation] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const siteTypes = [
     { value: 'PRINCIPAL', label: '🏢 Site Principal' },
@@ -80,7 +86,7 @@ export default function CreateEditSitePage() {
             latitude: site.latitude ? parseFloat(site.latitude) : null,
             longitude: site.longitude ? parseFloat(site.longitude) : null,
             geofencingRadius: site.geofencingRadius ?? 100,
-            parentId: null,
+            parentId: site.parent?.id || null,
             isActive: site.isActive,
           });
         }
@@ -158,12 +164,37 @@ export default function CreateEditSitePage() {
           alert('✅ Site créé avec succès');
         }
       }
-      router.push('/dashboard/superviseur/sites');
+      goBack();
     } catch (error) {
       console.error('Erreur de sauvegarde:', error);
       setErrors({ submit: 'Erreur lors de la sauvegarde du site' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!siteId || !isAdmin) return;
+    
+    setIsDeleting(true);
+    try {
+      await sitesService.delete(siteId);
+      alert('✅ Site supprimé avec succès');
+      goBack();
+    } catch (error: any) {
+      console.error('Erreur de suppression:', error);
+      alert(error?.message || 'Erreur lors de la suppression du site');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  const goBack = () => {
+    if (isAdmin) {
+      router.push('/dashboard/admin/sites');
+    } else {
+      router.push('/dashboard/superviseur/sites');
     }
   };
 
@@ -179,20 +210,36 @@ export default function CreateEditSitePage() {
     <div className="space-y-6">
       {/* En-tête */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center">
-          <button
-            onClick={() => router.back()}
-            className="mr-4 text-gray-500 hover:text-gray-700"
-          >
-            <FontAwesomeIcon icon={faArrowLeft} />
-          </button>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {isEdit ? 'Modifier le site' : 'Créer un nouveau site'}
-          </h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <button
+              onClick={goBack}
+              className="mr-4 text-gray-500 hover:text-gray-700"
+            >
+              <FontAwesomeIcon icon={faArrowLeft} />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {isEdit ? 'Modifier le site' : 'Créer un nouveau site'}
+              </h1>
+              <p className="text-gray-600 mt-1">
+                {isEdit ? 'Modifiez les informations du site' : 'Remplissez les informations pour créer un nouveau site'}
+              </p>
+            </div>
+          </div>
+          
+          {/* ✅ Bouton supprimer (admin/superadmin uniquement, en mode édition) */}
+          {isEdit && isAdmin && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isDeleting}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center"
+            >
+              <FontAwesomeIcon icon={faTrash} className="mr-2" />
+              Supprimer
+            </button>
+          )}
         </div>
-        <p className="text-gray-600 mt-2 ml-10">
-          {isEdit ? 'Modifiez les informations du site' : 'Remplissez les informations pour créer un nouveau site'}
-        </p>
       </div>
 
       {/* Formulaire */}
@@ -360,7 +407,7 @@ export default function CreateEditSitePage() {
                 .filter(s => s.id !== siteId)
                 .map((site) => (
                   <option key={site.id} value={site.id}>
-                    {site.name} ({site.client?.name})
+                    {site.name} ({typeof site.client === 'string' ? site.client : site.client?.name})
                   </option>
                 ))}
             </select>
@@ -391,7 +438,7 @@ export default function CreateEditSitePage() {
           <div className="flex justify-end space-x-3 pt-4 border-t">
             <button
               type="button"
-              onClick={() => router.back()}
+              onClick={goBack}
               className="px-6 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
               Annuler
@@ -416,6 +463,34 @@ export default function CreateEditSitePage() {
           </div>
         </form>
       </div>
+
+      {/* Modal confirmation suppression */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h2 className="text-xl font-semibold text-red-600 mb-4">⚠️ Confirmer la suppression</h2>
+            <p className="text-gray-600 mb-6">
+              Êtes-vous sûr de vouloir supprimer définitivement ce site ?<br />
+              <strong>Cette action est irréversible.</strong>
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {isDeleting ? 'Suppression...' : 'Supprimer définitivement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal géolocalisation */}
       {useGeolocation && (
