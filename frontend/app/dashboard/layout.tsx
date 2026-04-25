@@ -36,28 +36,25 @@ export default function DashboardLayout({
 
       try {
         const baseURL = apiConfig.getApiUrl();
-        const response = await fetch(`${baseURL}/api/auth/me`, {
+        const response = await fetch(`${baseURL}/auth/me`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": `Bearer ${token}`,
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
           },
           mode: "cors",
         });
 
         if (!response.ok) {
-          // Token invalide
           removeToken();
           logout();
           router.push("/login");
           return;
         }
 
-        // Token valide, on peut continuer
         setIsVerifying(false);
       } catch (error) {
-        // Erreur réseau : on laisse passer pour ne pas bloquer l'utilisateur
         console.warn("Impossible de vérifier le token, on continue:", error);
         setIsVerifying(false);
       }
@@ -83,7 +80,9 @@ export default function DashboardLayout({
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-4 text-gray-600">Vérification de l'authentification...</p>
+          <p className="mt-4 text-gray-600">
+            Vérification de l'authentification...
+          </p>
         </div>
       </div>
     );
@@ -231,41 +230,176 @@ export default function DashboardLayout({
 function getNavigationByRole(role: string) {
   const roleNav: Record<string, any[]> = {
     AGENT: [
-      { name: "Tableau de bord", shortName: "Accueil", href: "/dashboard/agent", icon: "📍" },
-      { name: "Mes rondes", shortName: "Rondes", href: "/dashboard/agent/rounds", icon: "🔄" },
-      { name: "Incidents", shortName: "Incidents", href: "/dashboard/agent/incidents", icon: "⚠️" },
-      { name: "Mon planning", shortName: "Planning", href: "/dashboard/agent/schedule", icon: "📅" },
+      {
+        name: "Tableau de bord",
+        shortName: "Accueil",
+        href: "/dashboard/agent",
+        icon: "📍",
+      },
+      {
+        name: "Mes rondes",
+        shortName: "Rondes",
+        href: "/dashboard/agent/rounds",
+        icon: "🔄",
+      },
+      {
+        name: "Incidents",
+        shortName: "Incidents",
+        href: "/dashboard/agent/incidents",
+        icon: "⚠️",
+      },
+      {
+        name: "Mon planning",
+        shortName: "Planning",
+        href: "/dashboard/agent/schedule",
+        icon: "📅",
+      },
     ],
     CONTROLEUR: [
-      { name: "Tableau de bord", shortName: "Accueil", href: "/dashboard/controleur", icon: "📊" },
-      { name: "Validation", shortName: "Valider", href: "/dashboard/controleur/validation", icon: "✅" },
-      { name: "Rondes", shortName: "Rondes", href: "/dashboard/controleur/rounds", icon: "🔄" },
-      { name: "Incidents", shortName: "Incidents", href: "/dashboard/controleur/incidents", icon: "⚠️" },
-      { name: "Agents", shortName: "Agents", href: "/dashboard/controleur/agents", icon: "👥" },
-      { name: "Rapports", shortName: "Rapports", href: "/dashboard/controleur/reports", icon: "📈" },
-      { name: "Planning", shortName: "Planning", href: "/dashboard/controleur/planning", icon: "📅" },
+      {
+        name: "Tableau de bord",
+        shortName: "Accueil",
+        href: "/dashboard/controleur",
+        icon: "📊",
+      },
+      {
+        name: "Validation",
+        shortName: "Valider",
+        href: "/dashboard/controleur/validation",
+        icon: "✅",
+      },
+      {
+        name: "Rondes",
+        shortName: "Rondes",
+        href: "/dashboard/controleur/rounds",
+        icon: "🔄",
+      },
+      {
+        name: "Incidents",
+        shortName: "Incidents",
+        href: "/dashboard/controleur/incidents",
+        icon: "⚠️",
+      },
+      {
+        name: "Agents",
+        shortName: "Agents",
+        href: "/dashboard/controleur/agents",
+        icon: "👥",
+      },
+      {
+        name: "Rapports",
+        shortName: "Rapports",
+        href: "/dashboard/controleur/reports",
+        icon: "📈",
+      },
+      {
+        name: "Planning",
+        shortName: "Planning",
+        href: "/dashboard/controleur/planning",
+        icon: "📅",
+      },
     ],
     SUPERVISEUR: [
-      { name: "Tableau de bord", shortName: "Accueil", href: "/dashboard/superviseur", icon: "📊" },
-      { name: "Sites", shortName: "Sites", href: "/dashboard/superviseur/sites", icon: "🏢" },
-      { name: "Affectations", shortName: "Affect.", href: "/dashboard/superviseur/assignments", icon: "📋" },
-      { name: "Rapports", shortName: "Rapports", href: "/dashboard/superviseur/reports", icon: "📈" },
-      { name: "Litiges", shortName: "Litiges", href: "/dashboard/superviseur/disputes", icon: "⚖️" },
+      {
+        name: "Tableau de bord",
+        shortName: "Accueil",
+        href: "/dashboard/superviseur",
+        icon: "📊",
+      },
+      {
+        name: "Sites",
+        shortName: "Sites",
+        href: "/dashboard/superviseur/sites",
+        icon: "🏢",
+      },
+      {
+        name: "Affectations",
+        shortName: "Affect.",
+        href: "/dashboard/superviseur/assignments",
+        icon: "📋",
+      },
+      {
+        name: "Rapports",
+        shortName: "Rapports",
+        href: "/dashboard/superviseur/reports",
+        icon: "📈",
+      },
+      {
+        name: "Litiges",
+        shortName: "Litiges",
+        href: "/dashboard/superviseur/disputes",
+        icon: "⚖️",
+      },
     ],
     ADMIN: [
-      { name: "Tableau de bord", shortName: "Accueil", href: "/dashboard/admin", icon: "⚙️" },
-      { name: "Utilisateurs", shortName: "Users", href: "/dashboard/admin/users", icon: "👤" },
-      { name: "Clients", shortName: "Clients", href: "/dashboard/admin/clients", icon: "🏛️" },
-      { name: "Finance", shortName: "Finance", href: "/dashboard/admin/finance", icon: "💰" },
-      { name: "Paramètres", shortName: "Params", href: "/dashboard/admin/settings", icon: "🔧" },
-      { name: "Conflits", shortName: "Conflits", href: "/dashboard/admin/conflicts", icon: "⚠️" },
+      {
+        name: "Tableau de bord",
+        shortName: "Accueil",
+        href: "/dashboard/admin",
+        icon: "⚙️",
+      },
+      {
+        name: "Utilisateurs",
+        shortName: "Users",
+        href: "/dashboard/admin/users",
+        icon: "👤",
+      },
+      {
+        name: "Clients",
+        shortName: "Clients",
+        href: "/dashboard/admin/clients",
+        icon: "🏛️",
+      },
+      {
+        name: "Finance",
+        shortName: "Finance",
+        href: "/dashboard/admin/finance",
+        icon: "💰",
+      },
+      {
+        name: "Paramètres",
+        shortName: "Params",
+        href: "/dashboard/admin/settings",
+        icon: "🔧",
+      },
+      {
+        name: "Conflits",
+        shortName: "Conflits",
+        href: "/dashboard/admin/conflicts",
+        icon: "⚠️",
+      },
     ],
     SUPERADMIN: [
-      { name: "Tableau de bord", shortName: "Accueil", href: "/dashboard/superadmin", icon: "👑" },
-      { name: "Système", shortName: "Système", href: "/dashboard/superadmin/system", icon: "🖥️" },
-      { name: "Audit", shortName: "Audit", href: "/dashboard/superadmin/audit", icon: "📝" },
-      { name: "Modules", shortName: "Modules", href: "/dashboard/superadmin/modules", icon: "🧩" },
-      { name: "Conflits", shortName: "Conflits", href: "/dashboard/superadmin/conflicts", icon: "⚠️" },
+      {
+        name: "Tableau de bord",
+        shortName: "Accueil",
+        href: "/dashboard/superadmin",
+        icon: "👑",
+      },
+      {
+        name: "Système",
+        shortName: "Système",
+        href: "/dashboard/superadmin/system",
+        icon: "🖥️",
+      },
+      {
+        name: "Audit",
+        shortName: "Audit",
+        href: "/dashboard/superadmin/audit",
+        icon: "📝",
+      },
+      {
+        name: "Modules",
+        shortName: "Modules",
+        href: "/dashboard/superadmin/modules",
+        icon: "🧩",
+      },
+      {
+        name: "Conflits",
+        shortName: "Conflits",
+        href: "/dashboard/superadmin/conflicts",
+        icon: "⚠️",
+      },
     ],
   };
 
