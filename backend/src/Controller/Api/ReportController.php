@@ -31,8 +31,7 @@ class ReportController extends AbstractController
         private SiteRepository $siteRepository,
         private AssignmentRepository $assignmentRepository,
         private RoundRepository $roundRepository
-    ) {
-    }
+    ) {}
 
     /**
      * Récupère les sites visités par le contrôleur (via ses rondes)
@@ -42,10 +41,10 @@ class ReportController extends AbstractController
     {
         /** @var User $user */
         $user = $this->getUser();
-        
+
         // Récupérer les sites des rondes où le contrôleur est supervisor
         $rounds = $this->roundRepository->findBy(['supervisor' => $user]);
-        
+
         $sites = [];
         foreach ($rounds as $round) {
             foreach ($round->getRoundSites() as $roundSite) {
@@ -57,7 +56,7 @@ class ReportController extends AbstractController
                 ];
             }
         }
-        
+
         return $this->json(array_values($sites));
     }
 
@@ -69,7 +68,7 @@ class ReportController extends AbstractController
     {
         /** @var User $user */
         $user = $this->getUser();
-        
+
         // Récupérer les sites visités par le contrôleur
         $siteIds = [];
         $rounds = $this->roundRepository->findBy(['supervisor' => $user]);
@@ -79,7 +78,7 @@ class ReportController extends AbstractController
             }
         }
         $siteIds = array_unique($siteIds);
-        
+
         // Récupérer les agents assignés à ces sites
         $agents = [];
         $assignments = $this->assignmentRepository->findBy(['site' => $siteIds]);
@@ -92,7 +91,7 @@ class ReportController extends AbstractController
                 ];
             }
         }
-        
+
         return $this->json(array_values($agents));
     }
 
@@ -110,9 +109,9 @@ class ReportController extends AbstractController
         // Récupérer les données
         $sites = $this->getControllerSites($user);
         $siteIds = array_column($sites, 'id');
-        
+
         $agents = $this->getControllerAgents($user);
-        
+
         // Compter les présences
         $presences = $this->presenceRepository->createQueryBuilder('p')
             ->where('p.site IN (:sites)')
@@ -123,15 +122,15 @@ class ReportController extends AbstractController
             ->setParameter('end', $endDate)
             ->getQuery()
             ->getResult();
-        
+
         $totalPresences = count($presences);
         $totalAbsences = 0; // À calculer selon la logique métier
-        
+
         // Calculer le taux de présence
         $totalDays = $startDate->diff($endDate)->days + 1;
         $maxPossible = count($agents) * $totalDays;
         $presenceRate = $maxPossible > 0 ? ($totalPresences / $maxPossible) * 100 : 0;
-        
+
         return $this->json([
             'period' => [
                 'type' => 'custom',
@@ -401,6 +400,17 @@ class ReportController extends AbstractController
 
     private function getControllerSites(User $user): array
     {
+        // ✅ Superviseur et Admin voient tous les sites actifs
+        if ($user->isSuperviseur() || $user->isAdmin()) {
+            $allSites = $this->siteRepository->findBy(['isActive' => true]);
+            return array_map(fn($site) => [
+                'id' => $site->getId(),
+                'name' => $site->getName(),
+                'address' => $site->getAddress(),
+            ], $allSites);
+        }
+
+        // Contrôleur simple : uniquement les sites de ses rondes
         $rounds = $this->roundRepository->findBy(['supervisor' => $user]);
         $sites = [];
         foreach ($rounds as $round) {
@@ -418,6 +428,26 @@ class ReportController extends AbstractController
 
     private function getControllerAgents(User $user): array
     {
+        // ✅ Superviseur et Admin voient tous les agents actifs
+        if ($user->isSuperviseur() || $user->isAdmin()) {
+            $allAgents = $this->siteRepository->createQueryBuilder('s')
+                ->select('DISTINCT a.id, a.firstName, a.lastName')
+                ->join('s.assignments', 'ass')
+                ->join('ass.agent', 'a')
+                ->where('s.isActive = true')
+                ->andWhere('a.isActive = true')
+                ->andWhere('a.role = :role')
+                ->setParameter('role', User::ROLE_AGENT)
+                ->getQuery()
+                ->getResult();
+
+            return array_map(fn($agent) => [
+                'id' => $agent['id'],
+                'name' => ($agent['firstName'] ?? '') . ' ' . ($agent['lastName'] ?? ''),
+            ], $allAgents);
+        }
+
+        // Contrôleur simple
         $siteIds = array_column($this->getControllerSites($user), 'id');
         $agents = [];
         $assignments = $this->assignmentRepository->findBy(['site' => $siteIds]);
@@ -432,6 +462,7 @@ class ReportController extends AbstractController
         }
         return array_values($agents);
     }
+
 
     private function generateExcelReport(\DateTimeImmutable $startDate, \DateTimeImmutable $endDate, array $sites, array $dates, array $rows): Response
     {

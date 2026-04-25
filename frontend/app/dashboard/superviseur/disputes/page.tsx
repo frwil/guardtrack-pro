@@ -25,15 +25,19 @@ interface DisputedPresence extends Presence {
   controllerVerdict: "PRESENT" | "ABSENT" | null;
   controller: { id: number; fullName: string } | null;
   controllerComment?: string;
+  photo?: string;
+  gpsLatitude?: string;
+  gpsLongitude?: string;
+  suspicionScore?: number;
 }
 
 export default function DisputesPage() {
   const [disputes, setDisputes] = useState<DisputedPresence[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedDispute, setSelectedDispute] =
-    useState<DisputedPresence | null>(null);
+  const [selectedDispute, setSelectedDispute] = useState<DisputedPresence | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadDisputes();
@@ -41,28 +45,35 @@ export default function DisputesPage() {
 
   const loadDisputes = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      // Utiliser la route spécifique pour les litiges
-      const response = await fetch("/api/presences/disputes", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("guardtrack_token")}`,
-        },
-      });
+      // ✅ Utiliser le service API avec la bonne URL
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/presences/disputes`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`, // ✅ Vérifier le nom de la clé
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        if (response.status === 403) {
+          setError("Vous n'avez pas les droits pour accéder aux litiges.");
+        } else {
+          setError("Erreur lors du chargement des litiges.");
+        }
+        setDisputes([]);
+        return;
+      }
+      
       const data = await response.json();
+      console.log('📊 Litiges reçus:', data);
       setDisputes(data);
     } catch (error) {
       console.error("Erreur de chargement:", error);
-      // Fallback : utiliser le service existant
-      const presences = await presencesService.list({ status: "DISPUTED" });
-      // Transformer en DisputedPresence
-      const disputedPresences = presences.map((p) => ({
-        ...p,
-        agentDeclared: p.checkIn ? ("PRESENT" as const) : ("ABSENT" as const),
-        controllerVerdict: (p as any).controllerVerdict || null,
-        controller: (p as any).controller || null,
-        controllerComment: (p as any).controllerComment,
-      }));
-      setDisputes(disputedPresences);
+      setError("Erreur réseau lors du chargement des litiges.");
+      setDisputes([]);
     } finally {
       setIsLoading(false);
     }
@@ -73,21 +84,30 @@ export default function DisputesPage() {
     resolution: "AGENT_WINS" | "CONTROLLER_WINS",
   ) => {
     setIsSubmitting(true);
+    setError(null);
     try {
-      await fetch(`/api/presences/${presenceId}/resolve-dispute`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("guardtrack_token")}`,
-        },
-        body: JSON.stringify({ resolution, note: resolutionNote }),
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/presences/${presenceId}/resolve-dispute`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({ resolution, note: resolutionNote }),
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error("Erreur lors de la résolution");
+      }
+      
       await loadDisputes();
       setSelectedDispute(null);
       setResolutionNote("");
     } catch (error) {
       console.error("Erreur de résolution:", error);
-      alert("Erreur lors de la résolution du litige");
+      setError("Erreur lors de la résolution du litige");
     } finally {
       setIsSubmitting(false);
     }
@@ -138,6 +158,16 @@ export default function DisputesPage() {
         </p>
       </div>
 
+      {/* ✅ Message d'erreur */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-800 flex items-center">
+            <FontAwesomeIcon icon={faExclamationTriangle} className="mr-2" />
+            {error}
+          </p>
+        </div>
+      )}
+
       {/* Liste des litiges */}
       <div className="bg-white rounded-lg shadow">
         <div className="divide-y">
@@ -147,7 +177,9 @@ export default function DisputesPage() {
                 icon={faCheck}
                 className="text-4xl text-green-500 mb-3"
               />
-              <p className="text-gray-500">Aucun litige en attente</p>
+              <p className="text-gray-500">
+                {error ? "Impossible de charger les litiges" : "Aucun litige en attente"}
+              </p>
             </div>
           ) : (
             disputes.map((dispute) => (
@@ -208,7 +240,7 @@ export default function DisputesPage() {
                           </span>
                         </p>
                         {dispute.controllerComment && (
-                          <p className="text-sm text-gray-500 mt-1">
+                          <p className="text-sm text-gray-500 mt-1 italic">
                             "{dispute.controllerComment}"
                           </p>
                         )}
@@ -220,16 +252,15 @@ export default function DisputesPage() {
                         <FontAwesomeIcon icon={faBuilding} className="mr-1" />
                         {dispute.site.name}
                       </span>
-                      {dispute.suspicionScore &&
-                        dispute.suspicionScore > 50 && (
-                          <span className="flex items-center text-orange-600">
-                            <FontAwesomeIcon
-                              icon={faExclamationTriangle}
-                              className="mr-1"
-                            />
-                            Score suspicion: {dispute.suspicionScore}%
-                          </span>
-                        )}
+                      {dispute.suspicionScore && dispute.suspicionScore > 50 && (
+                        <span className="flex items-center text-orange-600">
+                          <FontAwesomeIcon
+                            icon={faExclamationTriangle}
+                            className="mr-1"
+                          />
+                          Score suspicion: {dispute.suspicionScore}%
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -272,8 +303,8 @@ export default function DisputesPage() {
                     <strong>Agent :</strong> {selectedDispute.agent.fullName}
                   </p>
                   <p>
-                    <strong>Site :</strong> {selectedDispute.site.name} -{" "}
-                    {selectedDispute.site.address || "Adresse non disponible"}
+                    <strong>Site :</strong> {selectedDispute.site.name}
+                    {selectedDispute.site.address && ` - ${selectedDispute.site.address}`}
                   </p>
                   <p>
                     <strong>Heure :</strong>{" "}
@@ -293,19 +324,15 @@ export default function DisputesPage() {
                         : "Absent"}
                     </span>
                   </p>
-                  {selectedDispute.gpsLatitude &&
-                    selectedDispute.gpsLongitude && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        📍 GPS :{" "}
-                        {parseFloat(selectedDispute.gpsLatitude).toFixed(6)},{" "}
-                        {parseFloat(selectedDispute.gpsLongitude).toFixed(6)}
-                      </p>
-                    )}
+                  {selectedDispute.gpsLatitude && selectedDispute.gpsLongitude && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      📍 GPS : {parseFloat(selectedDispute.gpsLatitude).toFixed(6)},{" "}
+                      {parseFloat(selectedDispute.gpsLongitude).toFixed(6)}
+                    </p>
+                  )}
                   {selectedDispute.photo && (
                     <div className="mt-2">
-                      <p className="text-sm text-gray-500 mb-1">
-                        📸 Photo de l'agent :
-                      </p>
+                      <p className="text-sm text-gray-500 mb-1">📸 Photo de l'agent :</p>
                       <img
                         src={selectedDispute.photo}
                         alt="Photo agent"
@@ -314,6 +341,7 @@ export default function DisputesPage() {
                     </div>
                   )}
                 </div>
+                
                 {/* Détails contrôleur */}
                 <div className="border rounded-lg p-4">
                   <h3 className="font-medium mb-2">🔍 Constat du contrôleur</h3>
@@ -341,8 +369,6 @@ export default function DisputesPage() {
                       {selectedDispute.controllerComment}
                     </p>
                   )}
-                  {/* La photo du contrôleur est stockée dans un champ différent ? */}
-                  {/* Si elle est dans controllerPhoto, utilise selectedDispute.controllerPhoto */}
                 </div>
 
                 {/* Note de résolution */}

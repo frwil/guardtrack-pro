@@ -22,15 +22,14 @@ class SiteController extends AbstractController
         private EntityManagerInterface $entityManager,
         private SiteRepository $siteRepository,
         private PresenceRepository $presenceRepository
-    ) {
-    }
+    ) {}
 
     #[Route('', name: 'api_sites_list', methods: ['GET'])]
     public function list(Request $request): JsonResponse
     {
         $criteria = [];
         $orderBy = ['name' => 'ASC'];
-        
+
         if ($clientId = $request->query->get('clientId')) {
             $criteria['client'] = $clientId;
         }
@@ -40,9 +39,9 @@ class SiteController extends AbstractController
         if ($isActive = $request->query->get('isActive')) {
             $criteria['isActive'] = filter_var($isActive, FILTER_VALIDATE_BOOLEAN);
         }
-        
+
         $sites = $this->siteRepository->findBy($criteria, $orderBy);
-        
+
         return $this->json(array_map(fn(Site $s) => [
             'id' => $s->getId(),
             'name' => $s->getName(),
@@ -60,11 +59,11 @@ class SiteController extends AbstractController
     public function show(int $id): JsonResponse
     {
         $site = $this->siteRepository->find($id);
-        
+
         if (!$site) {
             return $this->json(['error' => 'Site not found'], Response::HTTP_NOT_FOUND);
         }
-        
+
         return $this->json([
             'id' => $site->getId(),
             'name' => $site->getName(),
@@ -109,7 +108,7 @@ class SiteController extends AbstractController
     public function create(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-        
+
         $site = new Site();
         $site->setName($data['name']);
         $site->setAddress($data['address']);
@@ -118,13 +117,13 @@ class SiteController extends AbstractController
         $site->setLongitude($data['longitude'] ?? null);
         $site->setGeofencingRadius($data['geofencingRadius'] ?? 100);
         $site->setIsActive($data['isActive'] ?? true);
-        
+
         // Client
         if (isset($data['clientId'])) {
             $client = $this->entityManager->getReference(\App\Entity\Client::class, $data['clientId']);
             $site->setClient($client);
         }
-        
+
         // Parent (site parent pour hiérarchie)
         if (isset($data['parentId'])) {
             $parent = $this->siteRepository->find($data['parentId']);
@@ -132,13 +131,13 @@ class SiteController extends AbstractController
                 $site->setParent($parent);
             }
         }
-        
+
         // Générer un QR code unique
         $site->setQrCode(uniqid('site_', true));
-        
+
         $this->entityManager->persist($site);
         $this->entityManager->flush();
-        
+
         return $this->json([
             'id' => $site->getId(),
             'name' => $site->getName(),
@@ -151,13 +150,13 @@ class SiteController extends AbstractController
     public function update(int $id, Request $request): JsonResponse
     {
         $site = $this->siteRepository->find($id);
-        
+
         if (!$site) {
             return $this->json(['error' => 'Site not found'], Response::HTTP_NOT_FOUND);
         }
-        
+
         $data = json_decode($request->getContent(), true);
-        
+
         if (isset($data['name'])) $site->setName($data['name']);
         if (isset($data['address'])) $site->setAddress($data['address']);
         if (isset($data['type'])) $site->setType($data['type']);
@@ -165,14 +164,14 @@ class SiteController extends AbstractController
         if (isset($data['longitude'])) $site->setLongitude($data['longitude']);
         if (isset($data['geofencingRadius'])) $site->setGeofencingRadius($data['geofencingRadius']);
         if (isset($data['isActive'])) $site->setIsActive($data['isActive']);
-        
+
         if (isset($data['parentId'])) {
             $parent = $data['parentId'] ? $this->siteRepository->find($data['parentId']) : null;
             $site->setParent($parent);
         }
-        
+
         $this->entityManager->flush();
-        
+
         return $this->json(['message' => 'Site updated successfully']);
     }
 
@@ -181,14 +180,14 @@ class SiteController extends AbstractController
     public function regenerateQr(int $id): JsonResponse
     {
         $site = $this->siteRepository->find($id);
-        
+
         if (!$site) {
             return $this->json(['error' => 'Site not found'], Response::HTTP_NOT_FOUND);
         }
-        
+
         $site->setQrCode(uniqid('site_', true));
         $this->entityManager->flush();
-        
+
         return $this->json([
             'qrCode' => $site->getQrCode(),
         ]);
@@ -198,20 +197,20 @@ class SiteController extends AbstractController
     public function getByQr(string $qrCode): JsonResponse
     {
         $site = $this->siteRepository->findOneBy(['qrCode' => $qrCode]);
-        
+
         if (!$site) {
             return $this->json(['error' => 'Site not found'], Response::HTTP_NOT_FOUND);
         }
-        
+
         /** @var User $user */
         $user = $this->getUser();
-        
+
         // Vérifier si l'agent est assigné à ce site
-        $isAssigned = $site->getAssignments()->exists(function($key, $assignment) use ($user) {
-            return $assignment->getAgent()->getId() === $user->getId() 
+        $isAssigned = $site->getAssignments()->exists(function ($key, $assignment) use ($user) {
+            return $assignment->getAgent()->getId() === $user->getId()
                 && $assignment->getStatus() === 'ACTIVE';
         });
-        
+
         return $this->json([
             'id' => $site->getId(),
             'name' => $site->getName(),
@@ -228,14 +227,14 @@ class SiteController extends AbstractController
     public function toggle(int $id): JsonResponse
     {
         $site = $this->siteRepository->find($id);
-        
+
         if (!$site) {
             return $this->json(['error' => 'Site not found'], Response::HTTP_NOT_FOUND);
         }
-        
+
         $site->setIsActive(!$site->isActive());
         $this->entityManager->flush();
-        
+
         return $this->json(['isActive' => $site->isActive()]);
     }
 
@@ -243,21 +242,23 @@ class SiteController extends AbstractController
     public function assignments(int $id): JsonResponse
     {
         $site = $this->siteRepository->find($id);
-        
+
         if (!$site) {
             return $this->json(['error' => 'Site not found'], Response::HTTP_NOT_FOUND);
         }
-        
-        $activeAssignments = $site->getAssignments()->filter(fn($a) => $a->getStatus() === 'ACTIVE');
-        
+
+        // ✅ Ne plus filtrer, retourner TOUTES les affectations (pas seulement ACTIVE)
+        $allAssignments = $site->getAssignments();
+
         return $this->json(array_map(fn($a) => [
             'id' => $a->getId(),
             'agent' => [
                 'id' => $a->getAgent()->getId(),
                 'fullName' => $a->getAgent()->getFullName(),
             ],
+            'status' => $a->getStatus(), // ✅ Ajouter le statut
             'startDate' => $a->getStartDate()->format('c'),
             'endDate' => $a->getEndDate()?->format('c'),
-        ], $activeAssignments->toArray()));
+        ], $allAssignments->toArray()));
     }
 }
