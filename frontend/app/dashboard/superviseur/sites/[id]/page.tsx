@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useAuthStore } from "../../../../../src/stores/authStore";
 import { sitesService, Site } from "../../../../../src/services/api/sites";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -21,7 +22,6 @@ import {
   faCheckCircle,
   faTimesCircle,
   faPlay,
-  faStop,
   faLayerGroup,
   faLocationDot,
   faCircle,
@@ -58,7 +58,18 @@ interface SiteStats {
 export default function SuperviseurSiteDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuthStore();
   const siteId = parseInt(params.id as string);
+
+  // ✅ Navigation dynamique selon le rôle
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
+  const backUrl = isAdmin ? '/dashboard/admin/sites' : '/dashboard/superviseur/sites';
+  const editUrl = isAdmin 
+    ? `/dashboard/admin/sites/${siteId}/edit` 
+    : `/dashboard/superviseur/sites/${siteId}/edit`;
+  const detailUrl = isAdmin 
+    ? `/dashboard/admin/sites` 
+    : `/dashboard/superviseur/sites`;
 
   const [site, setSite] = useState<Site | null>(null);
   const [stats, setStats] = useState<SiteStats | null>(null);
@@ -83,21 +94,8 @@ export default function SuperviseurSiteDetailPage() {
         sitesService.getChildren(siteId),
       ]);
 
-      // 🔍 LOG DE DÉBOGAGE
-      console.log("📊 Données des affectations:", assignmentsData);
-      console.log("📊 Nombre d'affectations:", assignmentsData.length);
-      assignmentsData.forEach((a: any, i: number) => {
-        console.log(`  Affectation ${i + 1}:`, {
-          id: a.id,
-          agent: a.agent?.fullName,
-          status: a.status,
-          startDate: a.startDate,
-          endDate: a.endDate,
-        });
-      });
-
       if (!siteData) {
-        router.push("/dashboard/superviseur/sites");
+        router.push(backUrl);
         return;
       }
 
@@ -186,7 +184,6 @@ export default function SuperviseurSiteDetailPage() {
   const handleDownloadQrCode = () => {
     if (!site) return;
 
-    const content = getQrCodeContent(site.id, site.qrCode);
     const url = getQrCodeUrl(site.id, site.qrCode, 300);
 
     const link = document.createElement("a");
@@ -211,10 +208,7 @@ export default function SuperviseurSiteDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500">Site non trouvé</p>
-        <Link
-          href="/dashboard/superviseur/sites"
-          className="text-indigo-600 hover:text-indigo-800"
-        >
+        <Link href={backUrl} className="text-indigo-600 hover:text-indigo-800">
           Retour à la liste
         </Link>
       </div>
@@ -227,40 +221,23 @@ export default function SuperviseurSiteDetailPage() {
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <Link
-              href="/dashboard/superviseur/sites"
-              className="mr-4 text-gray-400 hover:text-gray-600"
-            >
+            <Link href={backUrl} className="mr-4 text-gray-400 hover:text-gray-600">
               <FontAwesomeIcon icon={faArrowLeft} />
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-                <FontAwesomeIcon
-                  icon={faBuilding}
-                  className="mr-3 text-indigo-600"
-                />
+                <FontAwesomeIcon icon={faBuilding} className="mr-3 text-indigo-600" />
                 {site.name}
               </h1>
               <div className="flex items-center mt-1 space-x-3">
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    site.isActive
-                      ? "bg-green-100 text-green-800"
-                      : "bg-gray-100 text-gray-800"
-                  }`}
-                >
-                  <FontAwesomeIcon
-                    icon={site.isActive ? faToggleOn : faToggleOff}
-                    className="mr-1"
-                  />
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  site.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                }`}>
+                  <FontAwesomeIcon icon={site.isActive ? faToggleOn : faToggleOff} className="mr-1" />
                   {site.isActive ? "Site actif" : "Site inactif"}
                 </span>
-                <span className="text-sm text-gray-600">
-                  {siteTypes[site.type] || site.type}
-                </span>
-                <span className="text-sm text-gray-600">
-                  Client : {site.client?.name || "N/A"}
-                </span>
+                <span className="text-sm text-gray-600">{siteTypes[site.type] || site.type}</span>
+                <span className="text-sm text-gray-600">Client : {site.client?.name || "N/A"}</span>
               </div>
             </div>
           </div>
@@ -272,10 +249,7 @@ export default function SuperviseurSiteDetailPage() {
               <FontAwesomeIcon icon={faQrcode} className="mr-2" />
               QR Code
             </button>
-            <Link
-              href={`/dashboard/superviseur/sites/${siteId}/edit`}
-              className="px-4 py-2 text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200"
-            >
+            <Link href={editUrl} className="px-4 py-2 text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200">
               <FontAwesomeIcon icon={faEdit} className="mr-2" />
               Modifier
             </Link>
@@ -288,27 +262,19 @@ export default function SuperviseurSiteDetailPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg shadow p-4">
             <p className="text-sm text-gray-500">Affectations actives</p>
-            <p className="text-2xl font-bold text-green-600">
-              {stats.activeAssignments}
-            </p>
+            <p className="text-2xl font-bold text-green-600">{stats.activeAssignments}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-4">
             <p className="text-sm text-gray-500">Total affectations</p>
-            <p className="text-2xl font-bold text-blue-600">
-              {stats.totalAssignments}
-            </p>
+            <p className="text-2xl font-bold text-blue-600">{stats.totalAssignments}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-4">
             <p className="text-sm text-gray-500">Sites enfants</p>
-            <p className="text-2xl font-bold text-purple-600">
-              {children.length}
-            </p>
+            <p className="text-2xl font-bold text-purple-600">{children.length}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-4">
             <p className="text-sm text-gray-500">QR Code</p>
-            <p className="text-2xl font-bold text-orange-600">
-              {site.qrCode ? "✓" : "✗"}
-            </p>
+            <p className="text-2xl font-bold text-orange-600">{site.qrCode ? "✓" : "✗"}</p>
           </div>
         </div>
       )}
@@ -317,25 +283,22 @@ export default function SuperviseurSiteDetailPage() {
       <div className="bg-white rounded-lg shadow">
         <div className="border-b">
           <nav className="flex space-x-8 px-6">
-            {(["overview", "assignments", "children", "qr"] as const).map(
-              (tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === tab
-                      ? "border-indigo-600 text-indigo-600"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  {tab === "overview" && "Vue d'ensemble"}
-                  {tab === "assignments" &&
-                    `Affectations (${assignments.length})`}
-                  {tab === "children" && `Sites enfants (${children.length})`}
-                  {tab === "qr" && "QR Code"}
-                </button>
-              ),
-            )}
+            {(["overview", "assignments", "children", "qr"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === tab
+                    ? "border-indigo-600 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {tab === "overview" && "Vue d'ensemble"}
+                {tab === "assignments" && `Affectations (${assignments.length})`}
+                {tab === "children" && `Sites enfants (${children.length})`}
+                {tab === "qr" && "QR Code"}
+              </button>
+            ))}
           </nav>
         </div>
 
@@ -343,109 +306,45 @@ export default function SuperviseurSiteDetailPage() {
           {/* Vue d'ensemble */}
           {activeTab === "overview" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Informations générales */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                  <FontAwesomeIcon
-                    icon={faBuilding}
-                    className="mr-2 text-indigo-600"
-                  />
+                  <FontAwesomeIcon icon={faBuilding} className="mr-2 text-indigo-600" />
                   Informations générales
                 </h3>
                 <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-gray-500">Nom du site</p>
-                    <p className="font-medium text-gray-900">{site.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Type</p>
-                    <p className="text-gray-900">
-                      {siteTypes[site.type] || site.type}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Client</p>
-                    <p className="text-gray-900">
-                      {site.client?.name || "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Date de création</p>
-                    <p className="text-gray-900 flex items-center">
-                      <FontAwesomeIcon
-                        icon={faCalendar}
-                        className="mr-2 text-gray-400"
-                      />
-                      {formatDateTime(site.createdAt)}
-                    </p>
-                  </div>
+                  <div><p className="text-sm text-gray-500">Nom du site</p><p className="font-medium text-gray-900">{site.name}</p></div>
+                  <div><p className="text-sm text-gray-500">Type</p><p className="text-gray-900">{siteTypes[site.type] || site.type}</p></div>
+                  <div><p className="text-sm text-gray-500">Client</p><p className="text-gray-900">{site.client?.name || "N/A"}</p></div>
+                  <div><p className="text-sm text-gray-500">Date de création</p><p className="text-gray-900 flex items-center"><FontAwesomeIcon icon={faCalendar} className="mr-2 text-gray-400" />{formatDateTime(site.createdAt)}</p></div>
                 </div>
               </div>
 
-              {/* Adresse et GPS */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                  <FontAwesomeIcon
-                    icon={faMapMarkerAlt}
-                    className="mr-2 text-indigo-600"
-                  />
+                  <FontAwesomeIcon icon={faMapMarkerAlt} className="mr-2 text-indigo-600" />
                   Localisation
                 </h3>
                 <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-gray-500">Adresse</p>
-                    <p className="text-gray-900">{site.address}</p>
-                  </div>
+                  <div><p className="text-sm text-gray-500">Adresse</p><p className="text-gray-900">{site.address}</p></div>
                   {site.latitude && site.longitude && (
-                    <div>
-                      <p className="text-sm text-gray-500">Coordonnées GPS</p>
-                      <p className="text-gray-900 font-mono">
-                        <FontAwesomeIcon
-                          icon={faLocationDot}
-                          className="mr-1 text-gray-400"
-                        />
-                        {parseFloat(site.latitude).toFixed(6)},{" "}
-                        {parseFloat(site.longitude).toFixed(6)}
-                      </p>
-                    </div>
+                    <div><p className="text-sm text-gray-500">Coordonnées GPS</p><p className="text-gray-900 font-mono"><FontAwesomeIcon icon={faLocationDot} className="mr-1 text-gray-400" />{parseFloat(site.latitude).toFixed(6)}, {parseFloat(site.longitude).toFixed(6)}</p></div>
                   )}
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      Rayon de géorepérage
-                    </p>
-                    <p className="text-gray-900 flex items-center">
-                      <FontAwesomeIcon
-                        icon={faCircle}
-                        className="mr-2 text-gray-400"
-                      />
-                      {site.geofencingRadius} mètres
-                    </p>
-                  </div>
+                  <div><p className="text-sm text-gray-500">Rayon de géorepérage</p><p className="text-gray-900 flex items-center"><FontAwesomeIcon icon={faCircle} className="mr-2 text-gray-400" />{site.geofencingRadius} mètres</p></div>
                 </div>
               </div>
 
-              {/* QR Code */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                  <FontAwesomeIcon
-                    icon={faQrcode}
-                    className="mr-2 text-indigo-600"
-                  />
+                  <FontAwesomeIcon icon={faQrcode} className="mr-2 text-indigo-600" />
                   QR Code
                 </h3>
                 <div className="text-center">
                   {site.qrCode ? (
                     <>
                       <div className="bg-white p-3 rounded-lg inline-block mb-3">
-                        <img
-                          src={getQrCodeUrl(site.id, site.qrCode, 150)}
-                          alt="QR Code"
-                          className="w-32 h-32"
-                        />
+                        <img src={getQrCodeUrl(site.id, site.qrCode, 150)} alt="QR Code" className="w-32 h-32" />
                       </div>
-                      <p className="text-xs text-gray-500 break-all">
-                        {getQrCodeContent(site.id, site.qrCode)}
-                      </p>
+                      <p className="text-xs text-gray-500 break-all">{getQrCodeContent(site.id, site.qrCode)}</p>
                     </>
                   ) : (
                     <p className="text-gray-500">Aucun QR Code généré</p>
@@ -453,13 +352,9 @@ export default function SuperviseurSiteDetailPage() {
                 </div>
               </div>
 
-              {/* Hiérarchie */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                  <FontAwesomeIcon
-                    icon={faLayerGroup}
-                    className="mr-2 text-indigo-600"
-                  />
+                  <FontAwesomeIcon icon={faLayerGroup} className="mr-2 text-indigo-600" />
                   Hiérarchie
                 </h3>
                 <div className="space-y-3">
@@ -469,19 +364,10 @@ export default function SuperviseurSiteDetailPage() {
                       <ul className="mt-2 space-y-1">
                         {children.slice(0, 3).map((child) => (
                           <li key={child.id}>
-                            <Link
-                              href={`/dashboard/superviseur/sites/${child.id}`}
-                              className="text-indigo-600 hover:text-indigo-800"
-                            >
-                              • {child.name}
-                            </Link>
+                            <Link href={`${detailUrl}/${child.id}`} className="text-indigo-600 hover:text-indigo-800">• {child.name}</Link>
                           </li>
                         ))}
-                        {children.length > 3 && (
-                          <li className="text-sm text-gray-500">
-                            Et {children.length - 3} autre(s)...
-                          </li>
-                        )}
+                        {children.length > 3 && <li className="text-sm text-gray-500">Et {children.length - 3} autre(s)...</li>}
                       </ul>
                     ) : (
                       <p className="text-gray-500">Aucun site enfant</p>
@@ -496,62 +382,36 @@ export default function SuperviseurSiteDetailPage() {
           {activeTab === "assignments" && (
             <div>
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-gray-900">
-                  Affectations sur ce site
-                </h3>
-                <Link
-                  href={`/dashboard/superviseur/assignments/create?siteId=${siteId}`}
-                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
-                >
+                <h3 className="font-semibold text-gray-900">Affectations sur ce site</h3>
+                <Link href={`/dashboard/superviseur/assignments/create?siteId=${siteId}`} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
                   Nouvelle affectation
                 </Link>
               </div>
 
               {assignments.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">
-                  Aucune affectation pour ce site
-                </p>
+                <p className="text-gray-500 text-center py-8">Aucune affectation pour ce site</p>
               ) : (
                 <div className="space-y-2">
                   {assignments.map((assignment) => {
                     const statusBadge = getStatusBadge(assignment.status);
                     return (
-                      <div
-                        key={assignment.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                      >
+                      <div key={assignment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center">
-                          <FontAwesomeIcon
-                            icon={faUser}
-                            className="text-gray-400 mr-3"
-                          />
+                          <FontAwesomeIcon icon={faUser} className="text-gray-400 mr-3" />
                           <div>
-                            <p className="font-medium">
-                              {assignment.agent?.fullName || "N/A"}
-                            </p>
+                            <p className="font-medium">{assignment.agent?.fullName || "N/A"}</p>
                             <p className="text-sm text-gray-600">
                               {formatDate(assignment.startDate)}
-                              {assignment.endDate &&
-                                ` → ${formatDate(assignment.endDate)}`}
+                              {assignment.endDate && ` → ${formatDate(assignment.endDate)}`}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center space-x-3">
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs flex items-center ${statusBadge.color}`}
-                          >
-                            <FontAwesomeIcon
-                              icon={statusBadge.icon}
-                              className="mr-1"
-                            />
+                          <span className={`px-2 py-1 rounded-full text-xs flex items-center ${statusBadge.color}`}>
+                            <FontAwesomeIcon icon={statusBadge.icon} className="mr-1" />
                             {statusBadge.text}
                           </span>
-                          <Link
-                            href={`/dashboard/superviseur/assignments/${assignment.id}`}
-                            className="text-indigo-600 hover:text-indigo-800"
-                          >
-                            Voir
-                          </Link>
+                          <Link href={`/dashboard/superviseur/assignments/${assignment.id}`} className="text-indigo-600 hover:text-indigo-800">Voir</Link>
                         </div>
                       </div>
                     );
@@ -564,44 +424,22 @@ export default function SuperviseurSiteDetailPage() {
           {/* Sites enfants */}
           {activeTab === "children" && (
             <div>
-              <h3 className="font-semibold text-gray-900 mb-4">
-                Sites enfants
-              </h3>
-
+              <h3 className="font-semibold text-gray-900 mb-4">Sites enfants</h3>
               {children.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">
-                  Aucun site enfant
-                </p>
+                <p className="text-gray-500 text-center py-8">Aucun site enfant</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {children.map((child) => (
-                    <Link
-                      key={child.id}
-                      href={`/dashboard/superviseur/sites/${child.id}`}
-                      className="block p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
-                    >
+                    <Link key={child.id} href={`${detailUrl}/${child.id}`} className="block p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
-                          <FontAwesomeIcon
-                            icon={faBuilding}
-                            className="text-indigo-600 mr-3"
-                          />
+                          <FontAwesomeIcon icon={faBuilding} className="text-indigo-600 mr-3" />
                           <div>
-                            <p className="font-medium text-gray-900">
-                              {child.name}
-                            </p>
-                            <p className="text-sm text-gray-600 truncate max-w-xs">
-                              {child.address}
-                            </p>
+                            <p className="font-medium text-gray-900">{child.name}</p>
+                            <p className="text-sm text-gray-600 truncate max-w-xs">{child.address}</p>
                           </div>
                         </div>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs ${
-                            child.isActive
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
+                        <span className={`px-2 py-1 rounded-full text-xs ${child.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                           {child.isActive ? "Actif" : "Inactif"}
                         </span>
                       </div>
@@ -618,29 +456,16 @@ export default function SuperviseurSiteDetailPage() {
               {site.qrCode ? (
                 <>
                   <div className="bg-gray-100 p-6 rounded-lg inline-block mb-4">
-                    <img
-                      src={getQrCodeUrl(site.id, site.qrCode, 300)}
-                      alt="QR Code"
-                      className="w-64 h-64"
-                    />
+                    <img src={getQrCodeUrl(site.id, site.qrCode, 300)} alt="QR Code" className="w-64 h-64" />
                   </div>
-                  <p className="text-lg font-mono mb-2">
-                    {getQrCodeContent(site.id, site.qrCode)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Scannez ce QR code pour pointer sur ce site
-                  </p>
-                  <button
-                    onClick={handleDownloadQrCode}
-                    className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                  >
+                  <p className="text-lg font-mono mb-2">{getQrCodeContent(site.id, site.qrCode)}</p>
+                  <p className="text-sm text-gray-500">Scannez ce QR code pour pointer sur ce site</p>
+                  <button onClick={handleDownloadQrCode} className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
                     Télécharger le QR Code
                   </button>
                 </>
               ) : (
-                <p className="text-gray-500 py-8">
-                  Aucun QR Code généré pour ce site
-                </p>
+                <p className="text-gray-500 py-8">Aucun QR Code généré pour ce site</p>
               )}
             </div>
           )}
@@ -651,23 +476,12 @@ export default function SuperviseurSiteDetailPage() {
       {showQrModal && site.qrCode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 p-6 text-center">
-            <h2 className="text-xl font-semibold mb-4">
-              QR Code - {site.name}
-            </h2>
+            <h2 className="text-xl font-semibold mb-4">QR Code - {site.name}</h2>
             <div className="bg-gray-100 p-4 rounded-lg mb-4">
-              <img
-                src={getQrCodeUrl(site.id, site.qrCode, 200)}
-                alt="QR Code"
-                className="mx-auto"
-              />
+              <img src={getQrCodeUrl(site.id, site.qrCode, 200)} alt="QR Code" className="mx-auto" />
             </div>
-            <p className="text-sm text-gray-500 mb-4 break-all">
-              {getQrCodeContent(site.id, site.qrCode)}
-            </p>
-            <button
-              onClick={() => setShowQrModal(false)}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-            >
+            <p className="text-sm text-gray-500 mb-4 break-all">{getQrCodeContent(site.id, site.qrCode)}</p>
+            <button onClick={() => setShowQrModal(false)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
               Fermer
             </button>
           </div>
