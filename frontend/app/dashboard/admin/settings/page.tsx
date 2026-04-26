@@ -300,122 +300,55 @@ export default function AdminSettingsPage() {
                 </select>
               </div>
 
-              {/* Configuration Z.AI */}
-              {settings.ai.provider === 'zai' && (
-                <div className="border border-gray-200 rounded-lg p-4 space-y-4">
-                  <h3 className="font-medium">Configuration Z.AI</h3>
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">Clé API</label>
-                    <input
-                      type="password"
-                      placeholder="zai_..."
-                      value={settings.ai.providers?.find(p => p.id === 'zai')?.apiKey || ''}
-                      onChange={(e) => {
-                        const providers = settings.ai.providers || [];
-                        const index = providers.findIndex(p => p.id === 'zai');
-                        if (index >= 0) {
-                          providers[index].apiKey = e.target.value;
-                        } else {
-                          providers.push({ id: 'zai', name: 'Z.AI', enabled: true, apiKey: e.target.value });
-                        }
-                        setSettings({ ...settings, ai: { ...settings.ai, providers } });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <button
-                    onClick={() => handleTestAi('zai')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    🧪 Tester la connexion
-                  </button>
-                </div>
-              )}
+              {/* Info : clés API via env vars */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-700">
+                  ℹ️ Les clés API sont configurées via les variables d'environnement du serveur. Cette page permet uniquement de vérifier que la connexion au fournisseur fonctionne correctement.
+                </p>
+              </div>
 
-              {/* Configuration OpenAI */}
-              {settings.ai.provider === 'openai' && (
-                <div className="border border-gray-200 rounded-lg p-4 space-y-4">
-                  <h3 className="font-medium">Configuration OpenAI</h3>
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">Clé API</label>
-                    <input
-                      type="password"
-                      placeholder="sk-..."
-                      value={settings.ai.providers?.find(p => p.id === 'openai')?.apiKey || ''}
-                      onChange={(e) => {
-                        const providers = settings.ai.providers || [];
-                        const index = providers.findIndex(p => p.id === 'openai');
-                        if (index >= 0) {
-                          providers[index].apiKey = e.target.value;
-                        } else {
-                          providers.push({ id: 'openai', name: 'OpenAI', enabled: true, apiKey: e.target.value, model: 'gpt-4-vision-preview' });
-                        }
-                        setSettings({ ...settings, ai: { ...settings.ai, providers } });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    />
+              {/* Test de connexion pour les fournisseurs externes */}
+              {['zai', 'openai', 'google', 'custom'].includes(settings.ai.provider) && (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-800">
+                        {settings.ai.provider === 'zai' && 'Z.AI'}
+                        {settings.ai.provider === 'openai' && 'OpenAI (GPT-4 Vision)'}
+                        {settings.ai.provider === 'google' && 'Google Vision'}
+                        {settings.ai.provider === 'custom' && 'API Personnalisée'}
+                      </p>
+                      <p className="text-sm text-gray-500 mt-0.5">Fournisseur actif</p>
+                    </div>
+                    {testResult ? (
+                      <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
+                        testResult.success
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        <span className={`w-2 h-2 rounded-full ${testResult.success ? 'bg-green-500' : 'bg-red-500'}`} />
+                        {testResult.success ? 'Connexion OK' : 'Échec de connexion'}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleTestAi(settings.ai.provider)}
+                        className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                      >
+                        🧪 Tester la connexion
+                      </button>
+                    )}
                   </div>
-                  <button
-                    onClick={() => handleTestAi('openai')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    🧪 Tester la connexion
-                  </button>
-                </div>
-              )}
-
-              {/* Configuration API Personnalisée */}
-              {settings.ai.provider === 'custom' && (
-                <div className="border border-gray-200 rounded-lg p-4 space-y-4">
-                  <h3 className="font-medium">Configuration API Personnalisée</h3>
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">Endpoint URL</label>
-                    <input
-                      type="url"
-                      placeholder="https://api.example.com/v1/analyze"
-                      value={settings.ai.providers?.find(p => p.id === 'custom')?.endpoint || ''}
-                      onChange={(e) => {
-                        const providers = settings.ai.providers || [];
-                        const index = providers.findIndex(p => p.id === 'custom');
-                        if (index >= 0) {
-                          providers[index].endpoint = e.target.value;
-                        } else {
-                          providers.push({ id: 'custom', name: 'API Personnalisée', enabled: true, endpoint: e.target.value });
-                        }
-                        setSettings({ ...settings, ai: { ...settings.ai, providers } });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">Clé API (optionnel)</label>
-                    <input
-                      type="password"
-                      placeholder="Bearer token..."
-                      value={settings.ai.providers?.find(p => p.id === 'custom')?.apiKey || ''}
-                      onChange={(e) => {
-                        const providers = settings.ai.providers || [];
-                        const index = providers.findIndex(p => p.id === 'custom');
-                        if (index >= 0) {
-                          providers[index].apiKey = e.target.value;
-                        }
-                        setSettings({ ...settings, ai: { ...settings.ai, providers } });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <button
-                    onClick={() => handleTestAi('custom')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    🧪 Tester la connexion
-                  </button>
-                </div>
-              )}
-
-              {testResult && (
-                <div className={`p-4 rounded-lg ${testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
-                  {testResult.message}
+                  {testResult && (
+                    <div className="mt-3 flex items-center justify-between">
+                      <p className="text-sm text-gray-600">{testResult.message}</p>
+                      <button
+                        onClick={() => setTestResult(null)}
+                        className="text-xs text-gray-400 hover:text-gray-600 ml-4"
+                      >
+                        Retester
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

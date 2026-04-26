@@ -151,26 +151,49 @@ class SettingsController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $provider = $data['provider'] ?? '';
-        $apiKey = $data['apiKey'] ?? '';
+        // Clé API : priorité à la requête, sinon variable d'environnement
+        $apiKey = !empty($data['apiKey']) ? $data['apiKey'] : '';
 
         $success = false;
         $message = '';
 
+        $repo = $this->entityManager->getRepository(AppSettings::class);
+
         switch ($provider) {
             case 'zai':
+                if (empty($apiKey)) {
+                    $dbKey = $repo->findOneBy(['settingKey' => 'ai_provider_zai_key']);
+                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : (getenv('ZAI_API_KEY') ?: '');
+                }
                 $success = $this->testZaiConnection($apiKey);
                 $message = $success ? 'Connexion Z.AI réussie' : 'Échec de connexion à Z.AI';
                 break;
             case 'openai':
+                if (empty($apiKey)) {
+                    $dbKey = $repo->findOneBy(['settingKey' => 'ai_provider_openai_key']);
+                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : (getenv('OPENAI_API_KEY') ?: '');
+                }
                 $success = $this->testOpenAiConnection($apiKey);
                 $message = $success ? 'Connexion OpenAI réussie' : 'Échec de connexion à OpenAI';
                 break;
             case 'google':
+                if (empty($apiKey)) {
+                    $dbKey = $repo->findOneBy(['settingKey' => 'ai_provider_google_key']);
+                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : (getenv('GOOGLE_API_KEY') ?: '');
+                }
                 $success = $this->testGoogleVisionConnection($apiKey);
                 $message = $success ? 'Connexion Google Vision réussie' : 'Échec de connexion à Google Vision';
                 break;
             case 'custom':
                 $endpoint = $data['endpoint'] ?? '';
+                if (empty($endpoint)) {
+                    $dbEndpoint = $repo->findOneBy(['settingKey' => 'ai_provider_custom_endpoint']);
+                    $endpoint = $dbEndpoint ? ($dbEndpoint->getSettingValue() ?? '') : '';
+                }
+                if (empty($apiKey)) {
+                    $dbKey = $repo->findOneBy(['settingKey' => 'ai_provider_custom_key']);
+                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : '';
+                }
                 $success = $this->testCustomApiConnection($endpoint, $apiKey);
                 $message = $success ? 'Connexion API réussie' : 'Échec de connexion à l\'API';
                 break;
