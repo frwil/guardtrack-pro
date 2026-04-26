@@ -2,7 +2,9 @@
 
 namespace App\Controller\Api;
 
+use App\Entity\ActivityLog;
 use App\Entity\User;
+use App\Service\ActivityLogger;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -14,6 +16,8 @@ use Symfony\Component\Routing\Annotation\Route;
 
 class AuthController extends AbstractController
 {
+    public function __construct(private ActivityLogger $activityLogger) {}
+
     #[Route('/api/auth/login', name: 'api_auth_login', methods: ['POST'])]
     public function login(
         Request $request,
@@ -32,37 +36,58 @@ class AuthController extends AbstractController
             ], Response::HTTP_BAD_REQUEST);
         }
 
-        // Chercher l'utilisateur
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
 
         if (!$user) {
-            return $this->json([
-                'code' => 401,
-                'message' => 'Invalid credentials'
-            ], Response::HTTP_UNAUTHORIZED);
+            $this->activityLogger->log(
+                ActivityLog::ACTION_LOGIN_FAILED,
+                ActivityLog::ENTITY_USER,
+                ['email' => $email, 'reason' => 'user_not_found'],
+                null,
+                ActivityLog::STATUS_FAILED,
+            );
+            return $this->json(['code' => 401, 'message' => 'Invalid credentials'], Response::HTTP_UNAUTHORIZED);
         }
 
-        // Vérifier le mot de passe
         if (!$passwordHasher->isPasswordValid($user, $password)) {
-            return $this->json([
-                'code' => 401,
-                'message' => 'Invalid credentials'
-            ], Response::HTTP_UNAUTHORIZED);
+            $this->activityLogger->log(
+                ActivityLog::ACTION_LOGIN_FAILED,
+                ActivityLog::ENTITY_USER,
+                ['email' => $email, 'reason' => 'wrong_password'],
+                (string) $user->getId(),
+                ActivityLog::STATUS_FAILED,
+                null,
+                $user,
+            );
+            return $this->json(['code' => 401, 'message' => 'Invalid credentials'], Response::HTTP_UNAUTHORIZED);
         }
 
-        // Vérifier si le compte est actif
         if (!$user->isActive()) {
-            return $this->json([
-                'code' => 403,
-                'message' => 'Account is disabled'
-            ], Response::HTTP_FORBIDDEN);
+            $this->activityLogger->log(
+                ActivityLog::ACTION_LOGIN_FAILED,
+                ActivityLog::ENTITY_USER,
+                ['email' => $email, 'reason' => 'account_disabled'],
+                (string) $user->getId(),
+                ActivityLog::STATUS_FAILED,
+                null,
+                $user,
+            );
+            return $this->json(['code' => 403, 'message' => 'Account is disabled'], Response::HTTP_FORBIDDEN);
         }
 
-        // Mettre à jour la dernière connexion
         $user->setLastLoginAt(new \DateTimeImmutable());
         $entityManager->flush();
 
-        // Générer le token JWT
+        $this->activityLogger->log(
+            ActivityLog::ACTION_LOGIN,
+            ActivityLog::ENTITY_USER,
+            ['method' => 'password'],
+            (string) $user->getId(),
+            ActivityLog::STATUS_SUCCESS,
+            null,
+            $user,
+        );
+
         $token = $jwtManager->create($user);
 
         return $this->json([
@@ -91,32 +116,46 @@ class AuthController extends AbstractController
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
 
         if (!$user) {
-            return $this->json([
-                'code' => 401,
-                'message' => 'Invalid credentials'
-            ], Response::HTTP_UNAUTHORIZED);
+            $this->activityLogger->log(
+                ActivityLog::ACTION_LOGIN_FAILED,
+                ActivityLog::ENTITY_USER,
+                ['email' => $email, 'reason' => 'user_not_found', 'method' => 'pin'],
+                null,
+                ActivityLog::STATUS_FAILED,
+            );
+            return $this->json(['code' => 401, 'message' => 'Invalid credentials'], Response::HTTP_UNAUTHORIZED);
         }
 
         if (!$user->isActive()) {
-            return $this->json([
-                'code' => 403,
-                'message' => 'Account is disabled'
-            ], Response::HTTP_FORBIDDEN);
+            return $this->json(['code' => 403, 'message' => 'Account is disabled'], Response::HTTP_FORBIDDEN);
         }
 
-        // Vérifier le PIN
         if (!$user->verifyPinCode($pin)) {
-            return $this->json([
-                'code' => 401,
-                'message' => 'Invalid PIN'
-            ], Response::HTTP_UNAUTHORIZED);
+            $this->activityLogger->log(
+                ActivityLog::ACTION_PIN_VERIFICATION,
+                ActivityLog::ENTITY_USER,
+                ['reason' => 'wrong_pin'],
+                (string) $user->getId(),
+                ActivityLog::STATUS_FAILED,
+                null,
+                $user,
+            );
+            return $this->json(['code' => 401, 'message' => 'Invalid PIN'], Response::HTTP_UNAUTHORIZED);
         }
 
-        // Mettre à jour la dernière connexion
         $user->setLastLoginAt(new \DateTimeImmutable());
         $entityManager->flush();
 
-        // Générer le token JWT
+        $this->activityLogger->log(
+            ActivityLog::ACTION_PIN_VERIFICATION,
+            ActivityLog::ENTITY_USER,
+            ['method' => 'pin'],
+            (string) $user->getId(),
+            ActivityLog::STATUS_SUCCESS,
+            null,
+            $user,
+        );
+
         $token = $jwtManager->create($user);
 
         return $this->json([
