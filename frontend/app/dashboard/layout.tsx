@@ -7,6 +7,7 @@ import { networkMonitor } from "../../src/services/network/monitor";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { ChatWidget } from "../../src/components/ChatWidget";
 import { LanguageSwitcher } from "../../src/components/LanguageSwitcher";
+import { useTranslation } from "../../src/contexts/I18nContext";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faRotate, faSignOutAlt, faUser } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
@@ -19,6 +20,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated, logout } = useAuthStore();
+  const { t } = useTranslation();
   const [networkStatus, setNetworkStatus] = useState(
     networkMonitor.getStatus(),
   );
@@ -39,7 +41,7 @@ export default function DashboardLayout({
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-4 text-gray-600">Chargement...</p>
+          <p className="mt-4 text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -52,18 +54,17 @@ export default function DashboardLayout({
       {/* Indicateur réseau */}
       {networkStatus === "offline" && (
         <div className="sticky top-0 z-50 bg-red-500 text-white text-center py-2 text-sm">
-          📴 Mode hors ligne - Les données seront synchronisées au retour de la
-          connexion
+          📴 {t('network.offline')}
         </div>
       )}
       {networkStatus === "unstable" && (
         <div className="sticky top-0 z-50 bg-orange-500 text-white text-center py-2 text-sm">
-          ⚠️ Connexion instable détectée - Synchronisation en pause (5 minutes)
+          ⚠️ {t('network.unstable')}
         </div>
       )}
       {networkStatus === "reconnecting" && (
         <div className="sticky top-0 z-50 bg-yellow-500 text-white text-center py-2 text-sm">
-          🔄 Reconnexion en cours...
+          🔄 {t('network.reconnecting')}
         </div>
       )}
 
@@ -98,7 +99,7 @@ export default function DashboardLayout({
                     }`}
                   >
                     <span className="mr-3">{item.icon}</span>
-                    {item.name}
+                    {item.tKey ? t(item.tKey) : item.name}
                   </Link>
                 </div>
               );
@@ -127,7 +128,7 @@ export default function DashboardLayout({
               }}
               className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
-              🚪 Déconnexion
+              🚪 {t('common.logout')}
             </button>
           </div>
         </div>
@@ -176,7 +177,7 @@ export default function DashboardLayout({
               }`}
             >
               <span className="text-xl">{item.icon}</span>
-              <span className="mt-1">{item.shortName || item.name}</span>
+              <span className="mt-1">{item.shortName || (item.tKey ? t(item.tKey) : item.name)}</span>
             </Link>
           ))}
         </div>
@@ -191,268 +192,54 @@ export default function DashboardLayout({
 function getNavigationByRole(role: string) {
   const roleNav: Record<string, any[]> = {
     AGENT: [
-      {
-        name: "Tableau de bord",
-        shortName: "Accueil",
-        href: "/dashboard/agent",
-        icon: "📍",
-      },
-      {
-        name: "Mes rondes",
-        shortName: "Rondes",
-        href: "/dashboard/agent/rounds",
-        icon: "🔄",
-      },
-      {
-        name: "Incidents",
-        shortName: "Incidents",
-        href: "/dashboard/agent/incidents",
-        icon: "⚠️",
-      },
-      {
-        name: "Mon planning",
-        shortName: "Planning",
-        href: "/dashboard/agent/schedule",
-        icon: "📅",
-      },
+      { name: "Tableau de bord", tKey: "nav.dashboard", shortName: "Accueil", href: "/dashboard/agent",          icon: "📍" },
+      { name: "Mes rondes",      tKey: "nav.myRounds",  shortName: "Rondes",  href: "/dashboard/agent/rounds",   icon: "🔄" },
+      { name: "Incidents",       tKey: "nav.incidents", shortName: "Incidents",href: "/dashboard/agent/incidents",icon: "⚠️" },
+      { name: "Mon planning",    tKey: "nav.mySchedule",shortName: "Planning", href: "/dashboard/agent/schedule", icon: "📅" },
     ],
     CONTROLEUR: [
-      {
-        name: "Tableau de bord",
-        shortName: "Accueil",
-        href: "/dashboard/controleur",
-        icon: "📊",
-      },
-      {
-        name: "Validation",
-        shortName: "Valider",
-        href: "/dashboard/controleur/validation",
-        icon: "✅",
-      },
-      {
-        name: "Rondes",
-        shortName: "Rondes",
-        href: "/dashboard/controleur/rounds",
-        icon: "🔄",
-      },
-      {
-        name: "Incidents",
-        shortName: "Incidents",
-        href: "/dashboard/controleur/incidents",
-        icon: "⚠️",
-      },
-      {
-        name: "Agents",
-        shortName: "Agents",
-        href: "/dashboard/controleur/agents",
-        icon: "👥",
-      },
-      {
-        name: "Rapports",
-        shortName: "Rapports",
-        href: "/dashboard/controleur/reports",
-        icon: "📈",
-      },
-      {
-        name: "Planning",
-        shortName: "Planning",
-        href: "/dashboard/controleur/planning",
-        icon: "📅",
-      },
+      { name: "Tableau de bord", tKey: "nav.dashboard",  shortName: "Accueil",  href: "/dashboard/controleur",             icon: "📊" },
+      { name: "Validation",      tKey: "nav.validation", shortName: "Valider",  href: "/dashboard/controleur/validation",   icon: "✅" },
+      { name: "Rondes",          tKey: "nav.rounds",     shortName: "Rondes",   href: "/dashboard/controleur/rounds",       icon: "🔄" },
+      { name: "Incidents",       tKey: "nav.incidents",  shortName: "Incidents",href: "/dashboard/controleur/incidents",    icon: "⚠️" },
+      { name: "Agents",          tKey: "nav.agents",     shortName: "Agents",   href: "/dashboard/controleur/agents",       icon: "👥" },
+      { name: "Rapports",        tKey: "nav.reports",    shortName: "Rapports", href: "/dashboard/controleur/reports",      icon: "📈" },
+      { name: "Planning",        tKey: "nav.planning",   shortName: "Planning", href: "/dashboard/controleur/planning",     icon: "📅" },
     ],
     SUPERVISEUR: [
-      {
-        name: "Tableau de bord",
-        shortName: "Accueil",
-        href: "/dashboard/superviseur",
-        icon: "📊",
-      },
-      {
-        name: "Sites",
-        shortName: "Sites",
-        href: "/dashboard/superviseur/sites",
-        icon: "🏢",
-      },
-      {
-        name: "Affectations",
-        shortName: "Affect.",
-        href: "/dashboard/superviseur/assignments",
-        icon: "📋",
-      },
-      {
-        name: "Rapports",
-        shortName: "Rapports",
-        href: "/dashboard/superviseur/reports",
-        icon: "📈",
-      },
-      {
-        name: "Litiges",
-        shortName: "Litiges",
-        href: "/dashboard/superviseur/disputes",
-        icon: "⚖️",
-      },
+      { name: "Tableau de bord", tKey: "nav.dashboard",   shortName: "Accueil", href: "/dashboard/superviseur",             icon: "📊" },
+      { name: "Sites",           tKey: "nav.sites",       shortName: "Sites",   href: "/dashboard/superviseur/sites",       icon: "🏢" },
+      { name: "Affectations",    tKey: "nav.assignments", shortName: "Affect.", href: "/dashboard/superviseur/assignments", icon: "📋" },
+      { name: "Rapports",        tKey: "nav.reports",     shortName: "Rapports",href: "/dashboard/superviseur/reports",     icon: "📈" },
+      { name: "Litiges",         tKey: "nav.disputes",    shortName: "Litiges", href: "/dashboard/superviseur/disputes",    icon: "⚖️" },
     ],
     ADMIN: [
-      {
-        name: "Tableau de bord",
-        shortName: "Accueil",
-        href: "/dashboard/admin",
-        icon: "⚙️",
-      },
-      {
-        name: "Utilisateurs",
-        shortName: "Users",
-        href: "/dashboard/admin/users",
-        icon: "👤",
-      },
-      {
-        name: "Clients",
-        shortName: "Clients",
-        href: "/dashboard/admin/clients",
-        icon: "🏛️",
-      },
-      {
-        name: "Finance",
-        shortName: "Finance",
-        href: "/dashboard/admin/finance",
-        icon: "💰",
-      },
-      {
-        name: "Paramètres",
-        shortName: "Params",
-        href: "/dashboard/admin/settings",
-        icon: "🔧",
-      },
-      {
-        name: "Conflits",
-        shortName: "Conflits",
-        href: "/dashboard/admin/conflicts",
-        icon: "⚠️",
-      },
-      {
-        name: "Sites",
-        shortName: "Sites",
-        href: "/dashboard/superviseur/sites",
-        icon: "🏢",
-        group: "Supervision",
-      },
-      {
-        name: "Affectations",
-        shortName: "Affect.",
-        href: "/dashboard/superviseur/assignments",
-        icon: "📋",
-        group: "Supervision",
-      },
-      {
-        name: "Rapports",
-        shortName: "Rapports",
-        href: "/dashboard/superviseur/reports",
-        icon: "📈",
-        group: "Supervision",
-      },
-      {
-        name: "Litiges",
-        shortName: "Litiges",
-        href: "/dashboard/superviseur/disputes",
-        icon: "⚖️",
-        group: "Supervision",
-      },
+      { name: "Tableau de bord", tKey: "nav.dashboard", shortName: "Accueil", href: "/dashboard/admin",          icon: "⚙️" },
+      { name: "Utilisateurs",    tKey: "nav.users",     shortName: "Users",   href: "/dashboard/admin/users",    icon: "👤" },
+      { name: "Clients",         tKey: "nav.clients",   shortName: "Clients", href: "/dashboard/admin/clients",  icon: "🏛️" },
+      { name: "Finance",         tKey: "nav.finance",   shortName: "Finance", href: "/dashboard/admin/finance",  icon: "💰" },
+      { name: "Paramètres",      tKey: "nav.settings",  shortName: "Params",  href: "/dashboard/admin/settings", icon: "🔧" },
+      { name: "Conflits",        tKey: "nav.conflicts", shortName: "Conflits",href: "/dashboard/admin/conflicts",icon: "⚠️" },
+      { name: "Sites",           tKey: "nav.sites",       shortName: "Sites",   href: "/dashboard/superviseur/sites",       icon: "🏢", group: "Supervision" },
+      { name: "Affectations",    tKey: "nav.assignments", shortName: "Affect.", href: "/dashboard/superviseur/assignments", icon: "📋", group: "Supervision" },
+      { name: "Rapports",        tKey: "nav.reports",     shortName: "Rapports",href: "/dashboard/superviseur/reports",     icon: "📈", group: "Supervision" },
+      { name: "Litiges",         tKey: "nav.disputes",    shortName: "Litiges", href: "/dashboard/superviseur/disputes",    icon: "⚖️", group: "Supervision" },
     ],
     SUPERADMIN: [
-      {
-        name: "Tableau de bord",
-        shortName: "Accueil",
-        href: "/dashboard/superadmin",
-        icon: "👑",
-      },
-      {
-        name: "Système",
-        shortName: "Système",
-        href: "/dashboard/superadmin/system",
-        icon: "🖥️",
-      },
-      {
-        name: "Audit",
-        shortName: "Audit",
-        href: "/dashboard/superadmin/audit",
-        icon: "📝",
-      },
-      {
-        name: "Modules",
-        shortName: "Modules",
-        href: "/dashboard/superadmin/modules",
-        icon: "🧩",
-      },
-      {
-        name: "Tableau de bord Admin",
-        shortName: "Admin",
-        href: "/dashboard/admin",
-        icon: "⚙️",
-        group: "Administration",
-      },
-      {
-        name: "Utilisateurs",
-        shortName: "Users",
-        href: "/dashboard/admin/users",
-        icon: "👤",
-        group: "Administration",
-      },
-      {
-        name: "Clients",
-        shortName: "Clients",
-        href: "/dashboard/admin/clients",
-        icon: "🏛️",
-        group: "Administration",
-      },
-      {
-        name: "Finance",
-        shortName: "Finance",
-        href: "/dashboard/admin/finance",
-        icon: "💰",
-        group: "Administration",
-      },
-      {
-        name: "Paramètres",
-        shortName: "Params",
-        href: "/dashboard/admin/settings",
-        icon: "🔧",
-        group: "Administration",
-      },
-      {
-        name: "Conflits",
-        shortName: "Conflits",
-        href: "/dashboard/admin/conflicts",
-        icon: "⚠️",
-        group: "Administration",
-      },
-      {
-        name: "Sites",
-        shortName: "Sites",
-        href: "/dashboard/superviseur/sites",
-        icon: "🏢",
-        group: "Supervision",
-      },
-      {
-        name: "Affectations",
-        shortName: "Affect.",
-        href: "/dashboard/superviseur/assignments",
-        icon: "📋",
-        group: "Supervision",
-      },
-      {
-        name: "Rapports",
-        shortName: "Rapports",
-        href: "/dashboard/superviseur/reports",
-        icon: "📈",
-        group: "Supervision",
-      },
-      {
-        name: "Litiges",
-        shortName: "Litiges",
-        href: "/dashboard/superviseur/disputes",
-        icon: "⚖️",
-        group: "Supervision",
-      },
+      { name: "Tableau de bord", tKey: "nav.dashboard", shortName: "Accueil", href: "/dashboard/superadmin",        icon: "👑" },
+      { name: "Système",         tKey: "nav.system",    shortName: "Système", href: "/dashboard/superadmin/system", icon: "🖥️" },
+      { name: "Audit",           tKey: "nav.audit",     shortName: "Audit",   href: "/dashboard/superadmin/audit",  icon: "📝" },
+      { name: "Modules",         tKey: "nav.modules",   shortName: "Modules", href: "/dashboard/superadmin/modules",icon: "🧩" },
+      { name: "Tableau de bord Admin", tKey: "nav.dashboard", shortName: "Admin",   href: "/dashboard/admin",          icon: "⚙️", group: "Administration" },
+      { name: "Utilisateurs",          tKey: "nav.users",     shortName: "Users",   href: "/dashboard/admin/users",    icon: "👤", group: "Administration" },
+      { name: "Clients",               tKey: "nav.clients",   shortName: "Clients", href: "/dashboard/admin/clients",  icon: "🏛️", group: "Administration" },
+      { name: "Finance",               tKey: "nav.finance",   shortName: "Finance", href: "/dashboard/admin/finance",  icon: "💰", group: "Administration" },
+      { name: "Paramètres",            tKey: "nav.settings",  shortName: "Params",  href: "/dashboard/admin/settings", icon: "🔧", group: "Administration" },
+      { name: "Conflits",              tKey: "nav.conflicts", shortName: "Conflits",href: "/dashboard/admin/conflicts",icon: "⚠️", group: "Administration" },
+      { name: "Sites",        tKey: "nav.sites",       shortName: "Sites",   href: "/dashboard/superviseur/sites",       icon: "🏢", group: "Supervision" },
+      { name: "Affectations", tKey: "nav.assignments", shortName: "Affect.", href: "/dashboard/superviseur/assignments", icon: "📋", group: "Supervision" },
+      { name: "Rapports",     tKey: "nav.reports",     shortName: "Rapports",href: "/dashboard/superviseur/reports",     icon: "📈", group: "Supervision" },
+      { name: "Litiges",      tKey: "nav.disputes",    shortName: "Litiges", href: "/dashboard/superviseur/disputes",    icon: "⚖️", group: "Supervision" },
     ],
   };
 

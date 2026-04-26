@@ -6,11 +6,14 @@ import { useAuthStore } from "../../src/stores/authStore";
 import { apiConfig } from "../../src/services/api/config";
 import { ApiConfigModal } from "../../src/components/ApiConfigModal";
 import { useAppSettings } from "../../src/contexts/AppSettingsContext";
+import { useTranslation } from "../../src/contexts/I18nContext";
+import { LanguageSwitcher } from "../../src/components/LanguageSwitcher";
 
 export default function LoginPage() {
   const router = useRouter();
   const { login, loginWithPin, isLoading, error, clearError } = useAuthStore();
   const { companyName, companyLogo } = useAppSettings();
+  const { t } = useTranslation();
 
   const [mode, setMode] = useState<"password" | "pin">("password");
   const [email, setEmail] = useState("");
@@ -106,6 +109,9 @@ export default function LoginPage() {
   return (
     <>
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="absolute top-4 right-4">
+          <LanguageSwitcher variant="full" />
+        </div>
         <div className="max-w-md w-full space-y-8">
           {/* En-tête */}
           <div>
@@ -122,7 +128,7 @@ export default function LoginPage() {
               {companyName}
             </h2>
             <p className="mt-2 text-center text-sm text-gray-600">
-              Application de suivi de présence
+              {t('auth.subtitle')}
             </p>
 
             {/* Affichage de l'URL API */}
@@ -140,7 +146,7 @@ export default function LoginPage() {
           {/* Bannière mode hors ligne */}
           {isOffline && (
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
-              📴 <strong>Mode hors ligne</strong> — Utilisez votre code PIN si vous vous êtes déjà connecté depuis cet appareil.
+              📴 {t('auth.offlineBanner')}
             </div>
           )}
 
@@ -155,7 +161,7 @@ export default function LoginPage() {
                   : "text-gray-600 hover:text-gray-900"
               }`}
             >
-              🔐 Mot de passe
+              🔐 {t('auth.passwordMode')}
             </button>
             <button
               type="button"
@@ -166,7 +172,7 @@ export default function LoginPage() {
                   : "text-gray-600 hover:text-gray-900"
               }`}
             >
-              📱 Code PIN
+              📱 {t('auth.pinMode')}
             </button>
           </div>
 
@@ -179,7 +185,7 @@ export default function LoginPage() {
                   htmlFor="email"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Adresse email
+                  {t('auth.email')}
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -197,7 +203,7 @@ export default function LoginPage() {
                       clearError();
                     }}
                     className="appearance-none block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-shadow"
-                    placeholder="exemple@guardtrack.pro"
+                    placeholder={t('auth.emailPlaceholder')}
                   />
                 </div>
               </div>
@@ -209,7 +215,7 @@ export default function LoginPage() {
                     htmlFor="password"
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
-                    Mot de passe
+                    {t('auth.password')}
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -247,7 +253,7 @@ export default function LoginPage() {
                     htmlFor="pin"
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
-                    Code PIN (5 chiffres)
+                    {t('auth.pin')}
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -275,7 +281,7 @@ export default function LoginPage() {
                     />
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
-                    Entrez votre code PIN à 5 chiffres
+                    {t('auth.pinHint')}
                   </p>
                 </div>
               )}
@@ -297,7 +303,7 @@ export default function LoginPage() {
                     htmlFor="remember-me"
                     className="ml-2 block text-sm text-gray-700"
                   >
-                    Se souvenir de moi
+                    {t('auth.rememberMe')}
                   </label>
                 </div>
 
@@ -306,7 +312,7 @@ export default function LoginPage() {
                     href="#"
                     className="font-medium text-indigo-600 hover:text-indigo-500"
                   >
-                    Mot de passe oublié ?
+                    {t('auth.forgotPassword')}
                   </a>
                 </div>
               </div>
@@ -338,10 +344,10 @@ export default function LoginPage() {
                     <span className="absolute left-0 inset-y-0 flex items-center pl-3">
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     </span>
-                    Connexion en cours...
+                    {t('auth.signingIn')}
                   </>
                 ) : (
-                  "Se connecter"
+                  t('auth.signIn')
                 )}
               </button>
             </div>
