@@ -127,12 +127,13 @@ export default function DashboardLayout({
       <aside className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg hidden lg:block">
         <div className="flex flex-col h-full">
           <div className="p-4 border-b">
-            {companyLogo ? (
-              <img src={companyLogo} alt={companyName} className="h-10 object-contain mb-1" />
-            ) : (
-              <h1 className="text-xl font-bold text-indigo-600">🛡️ {companyName}</h1>
+            {companyLogo && (
+              <img src={companyLogo} alt={companyName} className="h-8 object-contain object-left mb-1" />
             )}
-            <p className="text-xs text-gray-500 mt-1">{user.role}</p>
+            <h1 className="text-base font-bold text-indigo-600 leading-tight">
+              {!companyLogo && '🛡️ '}{companyName}
+            </h1>
+            <p className="text-xs text-gray-500 mt-0.5">{user.role}</p>
           </div>
 
           <nav className="flex-1 p-4 space-y-1">
@@ -186,11 +187,14 @@ export default function DashboardLayout({
       >
         {/* Barre mobile avec notifications */}
         <div className="lg:hidden mb-4 flex items-center justify-between bg-white p-4 rounded-lg shadow">
-          {companyLogo ? (
-              <img src={companyLogo} alt={companyName} className="h-8 object-contain" />
-            ) : (
-              <h1 className="text-xl font-bold text-indigo-600">🛡️ {companyName}</h1>
-            )}
+          <div className="flex items-center gap-2">
+              {companyLogo && (
+                <img src={companyLogo} alt={companyName} className="h-7 object-contain" />
+              )}
+              <h1 className="text-lg font-bold text-indigo-600">
+                {!companyLogo && '🛡️ '}{companyName}
+              </h1>
+            </div>
           <div className="flex items-center space-x-3">
             <NotificationBell />
             <button

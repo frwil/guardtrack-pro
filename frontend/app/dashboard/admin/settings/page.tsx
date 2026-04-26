@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { settingsService, AppSettings, AiProvider } from '../../../../src/services/api/settings';
 import { useAppSettings } from '../../../../src/contexts/AppSettingsContext';
+import { optimizeLogo } from '../../../../src/utils/logoOptimizer';
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -55,7 +56,8 @@ export default function AdminSettingsPage() {
     if (!file) return;
     setIsUploadingLogo(true);
     try {
-      const result = await settingsService.uploadLogo(file);
+      const optimized = await optimizeLogo(file);
+      const result = await settingsService.uploadLogo(optimized);
       if (result?.url) {
         setSettings(s => s ? { ...s, company: { ...s.company, logo: result.url } } : s);
         await refreshBranding();
@@ -132,45 +134,65 @@ export default function AdminSettingsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Logo de l'entreprise
                 </label>
-                <div className="flex items-center gap-4">
-                  <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 overflow-hidden">
-                    {settings.company.logo ? (
-                      <img src={settings.company.logo} alt="Logo" className="w-full h-full object-contain p-1" />
-                    ) : (
-                      <span className="text-3xl">🛡️</span>
-                    )}
+                <div className="flex flex-col gap-4">
+                  {/* Prévisualisation logo + nom */}
+                  <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                    <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide">Aperçu barre latérale</p>
+                    <div className="flex flex-col gap-1">
+                      {settings.company.logo ? (
+                        <img
+                          src={settings.company.logo}
+                          alt="Logo"
+                          className="h-8 object-contain object-left"
+                        />
+                      ) : (
+                        <span className="text-2xl">🛡️</span>
+                      )}
+                      <p className="text-base font-bold text-indigo-600 leading-tight">{settings.company.name || 'Nom de l\'entreprise'}</p>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <input
-                      ref={logoInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleLogoUpload(file);
-                      }}
-                    />
-                    <button
-                      onClick={() => logoInputRef.current?.click()}
-                      disabled={isUploadingLogo}
-                      className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                    >
-                      {isUploadingLogo ? '⏳ Upload...' : '📁 Choisir un logo'}
-                    </button>
-                    {settings.company.logo && (
-                      <button
-                        onClick={async () => {
-                          setSettings(s => s ? { ...s, company: { ...s.company, logo: undefined } } : s);
-                          await settingsService.updateSettings({ company: { ...settings.company, logo: '' } });
-                          await refreshBranding();
+
+                  {/* Contrôles upload */}
+                  <div className="flex items-start gap-4">
+                    <div className="w-20 h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-white overflow-hidden flex-shrink-0">
+                      {settings.company.logo ? (
+                        <img src={settings.company.logo} alt="Logo" className="w-full h-full object-contain p-1" />
+                      ) : (
+                        <span className="text-2xl text-gray-300">🖼️</span>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleLogoUpload(file);
                         }}
-                        className="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+                      />
+                      <button
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={isUploadingLogo}
+                        className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
                       >
-                        🗑️ Supprimer le logo
+                        {isUploadingLogo ? '⏳ Optimisation...' : '📁 Choisir un logo'}
                       </button>
-                    )}
-                    <p className="text-xs text-gray-500">PNG, JPG, SVG ou WebP — recommandé&nbsp;: 200×60&nbsp;px</p>
+                      {settings.company.logo && (
+                        <button
+                          onClick={async () => {
+                            setSettings(s => s ? { ...s, company: { ...s.company, logo: undefined } } : s);
+                            await settingsService.updateSettings({ company: { ...settings.company, logo: '' } });
+                            await refreshBranding();
+                          }}
+                          className="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          🗑️ Supprimer le logo
+                        </button>
+                      )}
+                      <p className="text-xs text-gray-500">PNG, JPG, SVG ou WebP — optimisé automatiquement à max 300×100&nbsp;px</p>
+                    </div>
                   </div>
                 </div>
               </div>
