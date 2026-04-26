@@ -51,10 +51,11 @@ class SettingsController extends AbstractController
 
         $response = [
             'company' => [
-                'name' => $settings['company_name'] ?? 'GuardTrack Pro',
-                'email' => $settings['company_email'] ?? 'contact@guardtrack.pro',
-                'phone' => $settings['company_phone'] ?? '+237 699 00 00 00',
-                'logo' => $settings['company_logo'] ?? null,
+                'name'     => $settings['company_name']     ?? 'GuardTrack Pro',
+                'email'    => $settings['company_email']    ?? 'contact@guardtrack.pro',
+                'phone'    => $settings['company_phone']    ?? '+237 699 00 00 00',
+                'logo'     => $settings['company_logo']     ?? null,
+                'currency' => $settings['company_currency'] ?? 'XOF',
             ],
             'security' => [
                 'requirePhoto' => $settings['require_photo'] ?? true,
@@ -89,9 +90,10 @@ class SettingsController extends AbstractController
 
         // Mise à jour des paramètres
         $mappings = [
-            'company.name' => 'company_name',
-            'company.email' => 'company_email',
-            'company.phone' => 'company_phone',
+            'company.name'     => 'company_name',
+            'company.email'    => 'company_email',
+            'company.phone'    => 'company_phone',
+            'company.currency' => 'company_currency',
             'security.requirePhoto' => 'require_photo',
             'security.requirePin' => 'require_pin',
             'security.requireGeolocation' => 'require_geolocation',
@@ -192,7 +194,7 @@ class SettingsController extends AbstractController
         $repo = $this->entityManager->getRepository(AppSettings::class);
 
         // Charger uniquement les settings publics
-        $publicKeys = ['company_name', 'require_photo', 'require_pin', 'require_geolocation', 'geofencing_radius'];
+        $publicKeys = ['company_name', 'company_currency', 'require_photo', 'require_pin', 'require_geolocation', 'geofencing_radius'];
 
         $result = [];
         foreach ($publicKeys as $key) {
@@ -209,6 +211,7 @@ class SettingsController extends AbstractController
             'company_name' => 'GuardTrack Pro',
             'company_email' => 'contact@guardtrack.pro',
             'company_phone' => '+237 699 00 00 00',
+            'company_currency' => 'XOF',
             'require_photo' => true,
             'require_pin' => true,
             'require_geolocation' => true,

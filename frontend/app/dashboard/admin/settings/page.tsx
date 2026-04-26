@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { settingsService, AppSettings, AiProvider } from '../../../../src/services/api/settings';
+import { CURRENCIES } from '../../../../src/contexts/AppSettingsContext';
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -145,6 +146,29 @@ export default function AdminSettingsPage() {
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  💱 Devise
+                </label>
+                <select
+                  value={settings.company.currency ?? 'XOF'}
+                  onChange={(e) => setSettings({
+                    ...settings,
+                    company: { ...settings.company, currency: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                >
+                  {CURRENCIES.map(({ code, name, symbol }) => (
+                    <option key={code} value={code}>
+                      {code} — {symbol} — {name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Utilisée dans le module Finance et sur les rapports.
+                </p>
               </div>
             </div>
           )}

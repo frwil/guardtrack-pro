@@ -4,6 +4,7 @@ import { config } from '@fortawesome/fontawesome-svg-core';
 import '@fortawesome/fontawesome-svg-core/styles.css';
 import { ServiceWorkerRegistration } from '../src/components/ServiceWorkerRegistration';
 import { I18nProvider } from '../src/contexts/I18nContext';
+import { AppSettingsProvider } from '../src/contexts/AppSettingsContext';
 import 'leaflet/dist/leaflet.css';
 
 // Empêcher l'insertion automatique du CSS
@@ -30,8 +31,10 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <I18nProvider>
-          <ServiceWorkerRegistration />
-          {children}
+          <AppSettingsProvider>
+            <ServiceWorkerRegistration />
+            {children}
+          </AppSettingsProvider>
         </I18nProvider>
       </body>
     </html>
