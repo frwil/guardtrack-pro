@@ -330,6 +330,12 @@ function getNavigationByRole(role: string) {
         href: "/dashboard/superviseur/disputes",
         icon: "⚖️",
       },
+      {
+        name: "Incidents",
+        shortName: "Incidents",
+        href: "/dashboard/superviseur/incidents",
+        icon: "⚠️",
+      },
     ],
     ADMIN: [
       {
@@ -366,6 +372,12 @@ function getNavigationByRole(role: string) {
         name: "Conflits",
         shortName: "Conflits",
         href: "/dashboard/admin/conflicts",
+        icon: "⚠️",
+      },
+      {
+        name: "Incidents",
+        shortName: "Incidents",
+        href: "/dashboard/admin/incidents",
         icon: "⚠️",
       },
     ],

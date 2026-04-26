@@ -172,14 +172,14 @@ class FinanceController extends AbstractController
         $end = $end->setTime(23, 59, 59);
 
         $revenueByAgent = $this->timesheetRepository->createQueryBuilder('t')
-            ->select('u.id as agentId, u.fullName as agentName, SUM(t.hoursWorked) as totalHours, SUM(t.hoursWorked * u.hourlyRate) as revenue')
+            ->select('u.id as agentId, CONCAT(u.firstName, \' \', u.lastName) as agentName, SUM(t.hoursWorked) as totalHours, SUM(t.hoursWorked * u.hourlyRate) as revenue')
             ->join('t.agent', 'u')
             ->where('t.date BETWEEN :start AND :end')
             ->andWhere('t.status = :status')
             ->setParameter('start', $start)
             ->setParameter('end', $end)
             ->setParameter('status', 'VALIDATED')
-            ->groupBy('u.id, u.fullName')
+            ->groupBy('u.id, u.firstName, u.lastName')
             ->orderBy('totalHours', 'DESC')
             ->setMaxResults(10)
             ->getQuery()
