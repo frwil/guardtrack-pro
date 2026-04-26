@@ -161,7 +161,9 @@ export function ChatWidget() {
 
       {/* Fenêtre de chat */}
       {isOpen && (
-        <div className="fixed bottom-20 right-4 z-50 w-96 h-[600px] bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col">
+        <div className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col
+          left-2 right-2 bottom-20 max-h-[calc(100vh-6rem)]
+          sm:left-auto sm:right-4 sm:w-96 sm:h-[600px] sm:max-h-[calc(100vh-6rem)]">
           {/* En-tête */}
           <div className="p-4 border-b flex items-center justify-between bg-indigo-600 text-white rounded-t-lg">
             <div className="flex items-center">
