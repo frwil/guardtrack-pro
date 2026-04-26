@@ -1,28 +1,48 @@
 // Service Worker pour GuardTrack Pro
-const CACHE_NAME = 'guardtrack-cache-v3';
-const API_CACHE_NAME = 'guardtrack-api-cache-v3';
+const CACHE_NAME = 'guardtrack-cache-v4';
+const API_CACHE_NAME = 'guardtrack-api-cache-v4';
 
-// Installation du Service Worker
+// Routes à pré-cacher comme app shell (accès offline garanti)
+const APP_SHELL = [
+  '/',
+  '/login',
+  '/dashboard/agent',
+  '/dashboard/agent/rounds',
+  '/dashboard/agent/incidents',
+  '/dashboard/agent/schedule',
+  '/dashboard/superviseur',
+  '/dashboard/admin',
+  '/dashboard/superadmin',
+];
+
+// Installation : pré-cache l'app shell
 self.addEventListener('install', (event) => {
   console.log('🔧 Service Worker: Installation');
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return Promise.allSettled(
+        APP_SHELL.map((url) =>
+          cache.add(new Request(url, { cache: 'reload' })).catch(() => {
+            console.warn('Pré-cache échoué pour:', url);
+          })
+        )
+      );
+    }).then(() => self.skipWaiting())
+  );
 });
 
-// Activation du Service Worker
+// Activation : nettoyer les anciens caches
 self.addEventListener('activate', (event) => {
   console.log('✅ Service Worker: Activé');
   event.waitUntil(
     Promise.all([
-      caches.keys().then((cacheNames) => {
-        return Promise.all(
+      caches.keys().then((cacheNames) =>
+        Promise.all(
           cacheNames
             .filter((name) => name !== CACHE_NAME && name !== API_CACHE_NAME)
-            .map((name) => {
-              console.log('🗑️ Suppression du cache:', name);
-              return caches.delete(name);
-            })
-        );
-      }),
+            .map((name) => caches.delete(name))
+        )
+      ),
       self.clients.claim(),
     ])
   );
@@ -31,61 +51,110 @@ self.addEventListener('activate', (event) => {
 // Interception des requêtes fetch
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  
-  // ✅ IGNORER les requêtes non-HTTP/HTTPS (chrome-extension, etc.)
-  if (!url.protocol.startsWith('http')) {
-    return;
-  }
-  
-  // ✅ IGNORER les requêtes API - ne pas mettre en cache
+
+  if (!url.protocol.startsWith('http')) return;
+  if (event.request.method !== 'GET') return;
+
+  // API calls : network-first avec mise en cache des réponses GET
   if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(API_CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone).catch(() => {});
+            });
+          }
+          return response;
+        })
+        .catch(() =>
+          // Offline : retourner la réponse API mise en cache si disponible
+          caches.match(event.request).then(
+            (cached) =>
+              cached ||
+              new Response(JSON.stringify({ error: 'OFFLINE', offline: true }), {
+                status: 503,
+                headers: { 'Content-Type': 'application/json' },
+              })
+          )
+        )
+    );
     return;
   }
-  
-  // ✅ IGNORER les requêtes non-GET
-  if (event.request.method !== 'GET') {
+
+  // Navigation (pages HTML) : network-first, fallback cache, puis app shell
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone).catch(() => {});
+            });
+          }
+          return response;
+        })
+        .catch(() =>
+          // Offline : page exacte en cache, sinon root (app shell)
+          caches.match(event.request).then(
+            (cached) => cached || caches.match('/')
+          )
+        )
+    );
     return;
   }
-  
-  // Stratégie Network First pour les assets
+
+  // Assets statiques (_next/static, images, fonts) : cache-first
+  if (
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname.match(/\.(js|css|woff2?|png|jpg|jpeg|svg|ico|webp)$/)
+  ) {
+    event.respondWith(
+      caches.match(event.request).then(
+        (cached) =>
+          cached ||
+          fetch(event.request).then((response) => {
+            if (response.ok) {
+              const clone = response.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, clone).catch(() => {});
+              });
+            }
+            return response;
+          })
+      )
+    );
+    return;
+  }
+
+  // Tout le reste : network-first avec cache fallback
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Vérifier que la réponse est valide avant de la mettre en cache
-        if (!response || response.status !== 200 || response.type !== 'basic') {
-          return response;
-        }
-        
-        // Mettre en cache la réponse
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache).catch((err) => {
-            console.warn('Erreur mise en cache:', err);
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, clone).catch(() => {});
           });
-        });
+        }
         return response;
       })
-      .catch(() => {
-        // En cas d'échec réseau, essayer le cache
-        return caches.match(event.request);
-      })
+      .catch(() => caches.match(event.request))
   );
 });
 
-// Écouter les messages du client
+// Messages du client
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
-  
+
   if (event.data?.type === 'CLEAR_CACHES') {
     event.waitUntil(
-      caches.keys().then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((name) => caches.delete(name))
-        );
-      }).then(() => {
-        console.log('✅ Tous les caches ont été supprimés');
+      caches.keys().then((names) => Promise.all(names.map((n) => caches.delete(n)))).then(() => {
         event.ports[0]?.postMessage({ success: true });
       })
     );

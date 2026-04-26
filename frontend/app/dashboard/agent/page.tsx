@@ -43,6 +43,7 @@ import {
   faCheck,
   faRobot,
 } from "@fortawesome/free-solid-svg-icons";
+import { useTranslation } from "../../../src/contexts/I18nContext";
 
 // Types pour les étapes
 type Step = "site" | "geoloc" | "photo" | "comment" | "pin" | "summary";
@@ -63,6 +64,7 @@ export default function AgentDashboardPage() {
     checkIn,
     isLoading: presenceLoading,
   } = usePresenceStore();
+  const { t, locale } = useTranslation();
 
   // États
   const [mySites, setMySites] = useState<any[]>([]);
@@ -249,7 +251,7 @@ export default function AgentDashboardPage() {
   // Étape 4 : Vérification PIN
   const verifyPin = () => {
     if (pinCode.length !== 5) {
-      setError("Le code PIN doit contenir 5 chiffres");
+      setError(t('agent.checkin.pinError'));
       return;
     }
     setError(null);
@@ -275,7 +277,7 @@ export default function AgentDashboardPage() {
       resetForm();
       loadData();
     } else {
-      setError("Erreur lors du pointage. Veuillez réessayer.");
+      setError(t('agent.checkin.checkinError'));
     }
 
     setIsLoading(false);
@@ -302,28 +304,27 @@ export default function AgentDashboardPage() {
     const statusConfig: Record<string, any> = {
       PENDING: {
         icon: faClock,
-        title: "En attente de validation",
+        title: t('agent.dashboard.pendingValidation'),
         color: "bg-yellow-50 border-yellow-200",
         textColor: "text-yellow-800",
         iconColor: "text-yellow-600",
-        message:
-          "Votre pointage est en attente de validation par un contrôleur.",
+        message: t('agent.dashboard.pendingValidationHint'),
       },
       VALIDATED: {
         icon: faCircleCheck,
-        title: "Pointage validé",
+        title: t('agent.dashboard.checkinValidated'),
         color: "bg-green-50 border-green-200",
         textColor: "text-green-800",
         iconColor: "text-green-600",
-        message: "Votre présence a été validée.",
+        message: t('agent.dashboard.checkinValidatedHint'),
       },
       REJECTED: {
         icon: faCircleXmark,
-        title: "Pointage rejeté",
+        title: t('agent.dashboard.checkinRejected'),
         color: "bg-red-50 border-red-200",
         textColor: "text-red-800",
         iconColor: "text-red-600",
-        message: `Motif : ${activePresence.rejectionReason || "Non spécifié"}`,
+        message: `${t('agent.dashboard.reason')} ${activePresence.rejectionReason || "Non spécifié"}`,
       },
     };
 
@@ -336,7 +337,7 @@ export default function AgentDashboardPage() {
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900 flex items-center">
               <FontAwesomeIcon icon={faUser} className="mr-3 text-indigo-600" />
-              Bonjour, {user?.firstName || user?.fullName} !
+              {t('agent.dashboard.greeting', { name: user?.firstName || user?.fullName || '' })}
             </h1>
             <button
               onClick={loadData}
@@ -347,7 +348,7 @@ export default function AgentDashboardPage() {
           </div>
           <p className="text-gray-600 mt-1 flex items-center">
             <FontAwesomeIcon icon={faClock} className="mr-2 text-gray-400" />
-            {new Date().toLocaleDateString("fr-FR", {
+            {new Date().toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
               weekday: "long",
               day: "numeric",
               month: "long",
@@ -382,9 +383,9 @@ export default function AgentDashboardPage() {
                     icon={faClock}
                     className="w-5 mr-2 text-gray-400"
                   />
-                  <span className="font-medium">Arrivée :</span>
+                  <span className="font-medium">{t('agent.dashboard.arrival')}</span>
                   <span className="ml-2">
-                    {new Date(activePresence.checkIn).toLocaleTimeString("fr-FR")}
+                    {new Date(activePresence.checkIn).toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'en-GB')}
                   </span>
                 </p>
                 {activePresence.checkOut && (
@@ -393,9 +394,9 @@ export default function AgentDashboardPage() {
                       icon={faClock}
                       className="w-5 mr-2 text-gray-400"
                     />
-                    <span className="font-medium">Départ :</span>
+                    <span className="font-medium">{t('agent.dashboard.departure')}</span>
                     <span className="ml-2">
-                      {new Date(activePresence.checkOut).toLocaleTimeString("fr-FR")}
+                      {new Date(activePresence.checkOut).toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'en-GB')}
                     </span>
                   </p>
                 )}
@@ -434,7 +435,7 @@ export default function AgentDashboardPage() {
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Sites assignés</p>
+                <p className="text-sm text-gray-500">{t('agent.dashboard.sitesAssigned')}</p>
                 <p className="text-2xl font-bold text-indigo-600">
                   {mySites.length}
                 </p>
@@ -448,7 +449,7 @@ export default function AgentDashboardPage() {
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Pointages aujourd'hui</p>
+                <p className="text-sm text-gray-500">{t('agent.dashboard.checkinsToday')}</p>
                 <p className="text-2xl font-bold text-green-600">
                   {todayPresences.length}
                 </p>
@@ -469,13 +470,13 @@ export default function AgentDashboardPage() {
                 icon={faTriangleExclamation}
                 className="mr-2 text-red-600"
               />
-              Incidents récents
+              {t('agent.dashboard.recentIncidents')}
             </h2>
             <Link
               href="/dashboard/agent/incidents"
               className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center"
             >
-              Voir tout
+              {t('common.viewAll')}
               <FontAwesomeIcon icon={faArrowRight} className="ml-1" />
             </Link>
           </div>
@@ -514,21 +515,21 @@ export default function AgentDashboardPage() {
                       }`}
                     >
                       {incident.status === "RESOLVED"
-                        ? "Résolu"
+                        ? t('common.resolved')
                         : incident.status === "OPEN"
-                          ? "Ouvert"
-                          : "En cours"}
+                          ? t('common.open')
+                          : t('common.inProgress')}
                     </span>
                   </div>
                   <p className="text-sm text-gray-500 mt-1">
-                    {new Date(incident.reportedAt).toLocaleString("fr-FR")}
+                    {new Date(incident.reportedAt).toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-GB')}
                   </p>
                 </div>
               ))}
             </div>
           ) : (
             <p className="text-gray-500 text-center py-4">
-              Aucun incident récent
+              {t('agent.dashboard.noIncidents')}
             </p>
           )}
 
@@ -537,7 +538,7 @@ export default function AgentDashboardPage() {
             className="mt-4 w-full flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
           >
             <FontAwesomeIcon icon={faPlus} className="mr-2" />
-            Déclarer un incident
+            {t('agent.dashboard.reportIncident')}
           </Link>
         </div>
       </div>
@@ -553,8 +554,8 @@ export default function AgentDashboardPage() {
       {showCamera && (
         <CameraCapture
           multiple={false}
-          title="Photo de pointage"
-          description="Prenez une photo de vous en tenue de travail"
+          title={t('agent.checkin.photo')}
+          description={t('agent.checkin.photoHint')}
           onCapture={(_, optimized) => {
             setPhoto(optimized.dataUrl);
             setShowCamera(false);
@@ -571,11 +572,11 @@ export default function AgentDashboardPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center">
               <FontAwesomeIcon icon={faUser} className="mr-3 text-indigo-600" />
-              Bonjour, {user?.firstName || user?.fullName} !
+              {t('agent.dashboard.greeting', { name: user?.firstName || user?.fullName || '' })}
             </h1>
             <p className="text-gray-600 mt-1 flex items-center">
               <FontAwesomeIcon icon={faClock} className="mr-2 text-gray-400" />
-              {new Date().toLocaleDateString("fr-FR", {
+              {new Date().toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
                 weekday: "long",
                 day: "numeric",
                 month: "long",
@@ -599,7 +600,7 @@ export default function AgentDashboardPage() {
               icon={faBuilding}
               className="mr-2 text-indigo-600"
             />
-            Choisir un site pour pointer
+            {t('agent.dashboard.chooseSite')}
           </h2>
 
           {mySites.length > 0 ? (
@@ -637,9 +638,9 @@ export default function AgentDashboardPage() {
                 icon={faBuilding}
                 className="text-4xl text-gray-300 mb-3"
               />
-              <p className="text-gray-500 mb-4">Aucun site assigné</p>
+              <p className="text-gray-500 mb-4">{t('agent.dashboard.noSite')}</p>
               <p className="text-sm text-gray-400">
-                Contactez votre superviseur pour être assigné à un site
+                {t('agent.dashboard.noSiteHint')}
               </p>
             </div>
           )}
@@ -719,7 +720,7 @@ export default function AgentDashboardPage() {
                   icon={faLocationDot}
                   className="mr-2 text-indigo-600"
                 />
-                Géolocalisation
+                {t('agent.checkin.geo')}
               </h2>
 
               {isLoading ? (
@@ -730,7 +731,7 @@ export default function AgentDashboardPage() {
                     className="text-4xl text-indigo-600 mb-4"
                   />
                   <p className="text-gray-600">
-                    Obtention de votre position...
+                    {t('agent.checkin.gettingPosition')}
                   </p>
                 </div>
               ) : geolocation ? (
@@ -753,8 +754,8 @@ export default function AgentDashboardPage() {
                     <div>
                       <p className="font-medium text-lg">
                         {geolocation.withinGeofence
-                          ? "✅ Vous êtes dans la zone autorisée"
-                          : "⚠️ Vous êtes hors zone"}
+                          ? `✅ ${t('agent.checkin.inZone')}`
+                          : `⚠️ ${t('agent.checkin.outZone')}`}
                       </p>
                       <div className="mt-3 space-y-1">
                         <p className="text-sm flex items-center">
@@ -762,11 +763,11 @@ export default function AgentDashboardPage() {
                             icon={faLocationDot}
                             className="mr-2 text-gray-400 w-4"
                           />
-                          Distance : {geolocation.distance?.toFixed(0)} m
+                          {t('agent.checkin.distance')} {geolocation.distance?.toFixed(0)} m
                           {geolocation.withinGeofence !== undefined && (
                             <>
                               {" "}
-                              / Max :{" "}
+                              / {t('agent.checkin.max')}{" "}
                               {mySites.find((s) => s.id === selectedSite)
                                 ?.geofencingRadius || 100}{" "}
                               m
@@ -786,10 +787,10 @@ export default function AgentDashboardPage() {
                     />
                     <div>
                       <p className="font-medium text-yellow-800">
-                        Géolocalisation non disponible
+                        {t('agent.checkin.geoUnavailable')}
                       </p>
                       <p className="text-sm text-yellow-600 mt-1">
-                        Le pointage reste possible mais sera signalé
+                        {t('agent.checkin.geoUnavailableHint')}
                       </p>
                     </div>
                   </div>
@@ -813,7 +814,7 @@ export default function AgentDashboardPage() {
                   className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center"
                 >
                   <FontAwesomeIcon icon={faArrowRight} className="mr-2" />
-                  Continuer vers la photo
+                  {t('agent.checkin.continuePhoto')}
                 </button>
               </div>
             </div>
@@ -824,7 +825,7 @@ export default function AgentDashboardPage() {
             <div className="space-y-6">
               <h2 className="text-xl font-semibold flex items-center">
                 <FontAwesomeIcon icon={faCamera} className="mr-2 text-indigo-600" />
-                Photo obligatoire
+                {t('agent.checkin.photoRequired')}
               </h2>
 
               {!photo ? (
@@ -832,7 +833,7 @@ export default function AgentDashboardPage() {
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <p className="text-blue-800 flex items-center justify-center">
                       <FontAwesomeIcon icon={faLightbulb} className="mr-2" />
-                      Prenez une photo de vous en tenue de travail
+                      {t('agent.checkin.photoHint')}
                     </p>
                   </div>
 
@@ -841,12 +842,12 @@ export default function AgentDashboardPage() {
                     className="px-8 py-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg flex items-center mx-auto shadow-lg"
                   >
                     <FontAwesomeIcon icon={faCamera} className="mr-3 text-2xl" />
-                    Prendre une photo
+                    {t('agent.checkin.takePhoto')}
                   </button>
 
                   <p className="text-sm text-gray-500 flex items-center justify-center">
                     <FontAwesomeIcon icon={faShield} className="mr-1 text-gray-400" />
-                    La photo est obligatoire pour le pointage
+                    {t('agent.checkin.photoRequiredHint')}
                   </p>
                 </div>
               ) : (
@@ -865,7 +866,7 @@ export default function AgentDashboardPage() {
                         setShowCamera(true);
                       }}
                       className="absolute top-2 right-2 bg-white rounded-full p-2 shadow-md hover:bg-gray-100"
-                      title="Reprendre la photo"
+                      title={t('agent.checkin.retakePhoto')}
                     >
                       <FontAwesomeIcon icon={faRotate} />
                     </button>
@@ -886,10 +887,10 @@ export default function AgentDashboardPage() {
                     <div className="text-center py-8 bg-blue-50 rounded-lg">
                       <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-indigo-600 mb-3" />
                       <p className="text-gray-700 font-medium">
-                        Analyse de la photo en cours...
+                        {t('agent.checkin.analyzing')}
                       </p>
                       <p className="text-sm text-gray-500 mt-1">
-                        Détection d'uniforme, comptage de personnes...
+                        {t('agent.checkin.analyzingHint')}
                       </p>
                     </div>
                   ) : photoAnalysis ? (
@@ -897,18 +898,18 @@ export default function AgentDashboardPage() {
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5">
                       <p className="font-medium text-blue-800 mb-3 flex items-center">
                         <FontAwesomeIcon icon={faRobot} className="mr-2" />
-                        Analyse IA
+                        {t('agent.checkin.aiAnalysis')}
                         {photoAnalysis.uniformConfidence > 0.7 ? (
                           <span className="ml-2 text-green-600 text-sm">
-                            ✅ Haute confiance
+                            ✅ {t('agent.checkin.highConfidence')}
                           </span>
                         ) : photoAnalysis.uniformConfidence > 0.4 ? (
                           <span className="ml-2 text-yellow-600 text-sm">
-                            ⚠️ Confiance moyenne
+                            ⚠️ {t('agent.checkin.mediumConfidence')}
                           </span>
                         ) : (
                           <span className="ml-2 text-red-600 text-sm">
-                            ❌ Faible confiance
+                            ❌ {t('agent.checkin.lowConfidence')}
                           </span>
                         )}
                       </p>
@@ -946,19 +947,19 @@ export default function AgentDashboardPage() {
 
                       <div className="grid grid-cols-3 gap-2 pt-3 border-t border-blue-200">
                         <div className="text-center">
-                          <p className="text-xs text-gray-500">Personnes</p>
+                          <p className="text-xs text-gray-500">{t('agent.checkin.persons')}</p>
                           <p className="text-lg font-semibold text-gray-800">
                             {photoAnalysis.personCount}
                           </p>
                         </div>
                         <div className="text-center">
-                          <p className="text-xs text-gray-500">Uniforme</p>
+                          <p className="text-xs text-gray-500">{t('agent.checkin.uniform')}</p>
                           <p className={`text-lg font-semibold ${photoAnalysis.hasUniform ? "text-green-600" : "text-red-600"}`}>
                             {photoAnalysis.hasUniform ? "Oui" : "Non"}
                           </p>
                         </div>
                         <div className="text-center">
-                          <p className="text-xs text-gray-500">Confiance</p>
+                          <p className="text-xs text-gray-500">{t('agent.checkin.confidence')}</p>
                           <p className="text-lg font-semibold text-gray-800">
                             {(photoAnalysis.uniformConfidence * 100).toFixed(0)}%
                           </p>
@@ -969,13 +970,13 @@ export default function AgentDashboardPage() {
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                       <p className="text-yellow-800 flex items-center">
                         <FontAwesomeIcon icon={faTriangleExclamation} className="mr-2" />
-                        Analyse IA non disponible
+                        {t('agent.checkin.noAi')}
                       </p>
                       <button
                         onClick={() => analyzePhoto(photo)}
                         className="mt-2 text-sm text-indigo-600 hover:text-indigo-800 underline"
                       >
-                        Réessayer l'analyse
+                        {t('agent.checkin.retryAi')}
                       </button>
                     </div>
                   )}
@@ -987,7 +988,7 @@ export default function AgentDashboardPage() {
                       className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center"
                     >
                       <FontAwesomeIcon icon={faCamera} className="mr-2" />
-                      Reprendre la photo
+                      {t('agent.checkin.retakePhoto')}
                     </button>
 
                     <button
@@ -996,7 +997,7 @@ export default function AgentDashboardPage() {
                       className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center"
                     >
                       <FontAwesomeIcon icon={faCheck} className="mr-2" />
-                      Valider et continuer
+                      {t('agent.checkin.validateContinue')}
                       {!photoAnalysis && (
                         <span className="ml-2 text-xs opacity-75">(sans analyse)</span>
                       )}
@@ -1005,7 +1006,7 @@ export default function AgentDashboardPage() {
 
                   {!photoAnalysis && !isAnalyzingPhoto && (
                     <p className="text-xs text-gray-400 text-center">
-                      ⚠️ Sans analyse IA, le score de suspicion sera plus élevé
+                      ⚠️ {t('agent.checkin.noAiWarning')}
                     </p>
                   )}
                 </div>
@@ -1018,13 +1019,13 @@ export default function AgentDashboardPage() {
             <div className="space-y-6">
               <h2 className="text-xl font-semibold flex items-center">
                 <FontAwesomeIcon icon={faPen} className="mr-2 text-indigo-600" />
-                Commentaire (optionnel)
+                {t('agent.checkin.comment')}
               </h2>
 
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Ajoutez un commentaire sur votre prise de poste..."
+                placeholder={t('agent.checkin.commentPlaceholder')}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 rows={4}
               />
@@ -1033,7 +1034,7 @@ export default function AgentDashboardPage() {
                 <div className="space-y-3">
                   <p className="text-sm font-medium text-gray-700 flex items-center">
                     <FontAwesomeIcon icon={faLightbulb} className="mr-2 text-yellow-500" />
-                    Suggestions :
+                    {t('agent.checkin.suggestions')}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {smartSuggestions.map((suggestion, i) => (
@@ -1074,12 +1075,12 @@ export default function AgentDashboardPage() {
             <div className="space-y-6">
               <h2 className="text-xl font-semibold flex items-center">
                 <FontAwesomeIcon icon={faLock} className="mr-2 text-indigo-600" />
-                Vérification du code PIN
+                {t('agent.checkin.pinVerif')}
               </h2>
 
               <p className="text-gray-600 flex items-center">
                 <FontAwesomeIcon icon={faShield} className="mr-2 text-gray-400" />
-                Entrez votre code PIN à 5 chiffres pour valider
+                {t('agent.checkin.pinHint')}
               </p>
 
               <div className="flex justify-center">
@@ -1191,7 +1192,7 @@ export default function AgentDashboardPage() {
                           </span>
                           <span className="flex items-center text-sm">
                             <FontAwesomeIcon icon={faCircleCheck} className="mr-1 text-gray-400 text-xs" />
-                            Confiance : {(photoAnalysis.uniformConfidence * 100).toFixed(0)}%
+                            {t('agent.checkin.confidence')} : {(photoAnalysis.uniformConfidence * 100).toFixed(0)}%
                           </span>
                         </div>
                         {photoAnalysis.suspicionScore > 30 && (
@@ -1202,7 +1203,7 @@ export default function AgentDashboardPage() {
                         )}
                       </div>
                     ) : (
-                      <span className="text-gray-400 text-sm">Analyse non disponible</span>
+                      <span className="text-gray-400 text-sm">{t('agent.checkin.noAi')}</span>
                     )}
                   </div>
                 </div>

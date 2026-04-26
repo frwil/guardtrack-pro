@@ -8,6 +8,7 @@ import { NotificationBell } from "../../src/components/NotificationBell";
 import { ChatWidget } from "../../src/components/ChatWidget";
 import { LanguageSwitcher } from "../../src/components/LanguageSwitcher";
 import { useTranslation } from "../../src/contexts/I18nContext";
+import { useAppSettings } from "../../src/contexts/AppSettingsContext";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faRotate, faSignOutAlt, faUser } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
@@ -19,17 +20,18 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
   const { t } = useTranslation();
+  const { companyName, companyLogo } = useAppSettings();
   const [networkStatus, setNetworkStatus] = useState(
     networkMonitor.getStatus(),
   );
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (_hasHydrated && !isAuthenticated) {
       router.push("/login");
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, _hasHydrated, router]);
 
   useEffect(() => {
     const unsubscribe = networkMonitor.subscribe(setNetworkStatus);
@@ -71,9 +73,16 @@ export default function DashboardLayout({
       {/* Sidebar desktop */}
       <aside className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg hidden lg:block">
         <div className="flex flex-col h-full">
-          <div className="p-4 border-b">
-            <h1 className="text-xl font-bold text-indigo-600">🛡️ GuardTrack</h1>
-            <p className="text-xs text-gray-500 mt-1">{user.role}</p>
+          <div className="p-4 border-b flex items-center gap-3">
+            {companyLogo ? (
+              <img src={companyLogo} alt={companyName} className="h-9 w-9 object-contain rounded" />
+            ) : (
+              <span className="text-2xl">🛡️</span>
+            )}
+            <div className="min-w-0">
+              <h1 className="text-base font-bold text-indigo-600 truncate leading-tight">{companyName}</h1>
+              <p className="text-xs text-gray-500">{user.role}</p>
+            </div>
           </div>
 
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">

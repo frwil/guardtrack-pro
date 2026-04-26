@@ -31,6 +31,30 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const optimizeImage = (file: File): Promise<File> =>
+    new Promise((resolve) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        const MAX = 512;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w >= h) { h = Math.round(h * MAX / w); w = MAX; }
+          else        { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(objectUrl);
+        canvas.toBlob(
+          (blob) => resolve(new File([blob!], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' })),
+          'image/jpeg', 0.85
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
+      img.src = objectUrl;
+    });
+
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -42,13 +66,14 @@ export default function AdminSettingsPage() {
     if (!file) return;
     setIsUploadingLogo(true);
     try {
-      const result = await settingsService.uploadLogo(file);
+      const optimized = await optimizeImage(file);
+      const result = await settingsService.uploadLogo(optimized);
       if (result?.url) {
         setSettings(s => s ? { ...s, company: { ...s.company, logo: result.url } } : s);
         setLogoPreview(null);
         if (logoInputRef.current) logoInputRef.current.value = '';
         await refreshSettings();
-        alert('✅ Logo mis à jour');
+        alert('✅ Logo optimisé et mis à jour');
       }
     } catch {
       alert('❌ Erreur lors de l\'upload du logo');

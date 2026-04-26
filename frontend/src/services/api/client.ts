@@ -50,12 +50,39 @@ class ApiClient {
     }
   }
 
+  private getCacheKey(endpoint: string): string {
+    return `api_cache_${endpoint}`;
+  }
+
+  private readCache<T>(endpoint: string): T | undefined {
+    try {
+      const raw = localStorage.getItem(this.getCacheKey(endpoint));
+      return raw ? JSON.parse(raw) : undefined;
+    } catch { return undefined; }
+  }
+
+  private writeCache(endpoint: string, data: unknown): void {
+    try {
+      localStorage.setItem(this.getCacheKey(endpoint), JSON.stringify(data));
+    } catch {}
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
   ): Promise<ApiResponse<T>> {
+    const method = (options.method || 'GET').toUpperCase();
     const token = getToken();
     const baseURL = this.getBaseURL();
+
+    // Offline → retourner immédiatement les données en cache (GET) ou erreur OFFLINE
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      if (method === 'GET') {
+        const cached = this.readCache<T>(endpoint);
+        if (cached !== undefined) return { data: cached, status: 200 };
+      }
+      return { error: 'OFFLINE', status: 0 };
+    }
 
     const headers = new Headers(options.headers);
 
@@ -115,6 +142,11 @@ class ApiClient {
       }
 
       const data = await response.json().catch(() => null);
+
+      // Mettre en cache les réponses GET réussies pour usage offline
+      if (method === 'GET' && response.ok && data !== null) {
+        this.writeCache(endpoint, data);
+      }
 
       return {
         data: response.ok ? data : undefined,
