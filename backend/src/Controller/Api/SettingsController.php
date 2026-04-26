@@ -163,26 +163,23 @@ class SettingsController extends AbstractController
             case 'zai':
                 if (empty($apiKey)) {
                     $dbKey = $repo->findOneBy(['settingKey' => 'ai_provider_zai_key']);
-                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : (getenv('ZAI_API_KEY') ?: '');
+                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : $this->resolveEnv('ZAI_API_KEY');
                 }
-                $success = $this->testZaiConnection($apiKey);
-                $message = $success ? 'Connexion Z.AI réussie' : 'Échec de connexion à Z.AI';
+                [$success, $message] = $this->testZaiConnection($apiKey);
                 break;
             case 'openai':
                 if (empty($apiKey)) {
                     $dbKey = $repo->findOneBy(['settingKey' => 'ai_provider_openai_key']);
-                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : (getenv('OPENAI_API_KEY') ?: '');
+                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : $this->resolveEnv('OPENAI_API_KEY');
                 }
-                $success = $this->testOpenAiConnection($apiKey);
-                $message = $success ? 'Connexion OpenAI réussie' : 'Échec de connexion à OpenAI';
+                [$success, $message] = $this->testOpenAiConnection($apiKey);
                 break;
             case 'google':
                 if (empty($apiKey)) {
                     $dbKey = $repo->findOneBy(['settingKey' => 'ai_provider_google_key']);
-                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : (getenv('GOOGLE_API_KEY') ?: '');
+                    $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : $this->resolveEnv('GOOGLE_API_KEY');
                 }
-                $success = $this->testGoogleVisionConnection($apiKey);
-                $message = $success ? 'Connexion Google Vision réussie' : 'Échec de connexion à Google Vision';
+                [$success, $message] = $this->testGoogleVisionConnection($apiKey);
                 break;
             case 'custom':
                 $endpoint = $data['endpoint'] ?? '';
@@ -194,8 +191,7 @@ class SettingsController extends AbstractController
                     $dbKey = $repo->findOneBy(['settingKey' => 'ai_provider_custom_key']);
                     $apiKey = $dbKey ? ($dbKey->getSettingValue() ?? '') : '';
                 }
-                $success = $this->testCustomApiConnection($endpoint, $apiKey);
-                $message = $success ? 'Connexion API réussie' : 'Échec de connexion à l\'API';
+                [$success, $message] = $this->testCustomApiConnection($endpoint, $apiKey);
                 break;
             default:
                 $message = 'Test non supporté pour ce provider';
@@ -345,114 +341,118 @@ class SettingsController extends AbstractController
         return $value;
     }
 
-    private function testZaiConnection(string $apiKey): bool
+    private function resolveEnv(string $name): string
+    {
+        // Symfony charge les .env dans $_ENV ; getenv() lit les vars C-level
+        return $_ENV[$name] ?? getenv($name) ?: '';
+    }
+
+    private function curlTest(string $url, array $headers, ?string $body = null, int $timeout = 15): array
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+
+        if ($body !== null) {
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        }
+
+        $response = curl_exec($ch);
+        $httpCode  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        return [$httpCode, $curlError, $response];
+    }
+
+    /** @return array{bool, string} */
+    private function testZaiConnection(string $apiKey): array
     {
         if (empty($apiKey)) {
-            error_log('Z.AI Test: API Key is empty');
-            return false;
+            return [false, 'Clé API introuvable (base de données et variable ZAI_API_KEY vides)'];
         }
 
-        try {
-            error_log('Z.AI Test: Testing connection with API Key: ' . substr($apiKey, 0, 10) . '...');
-            
-            // Test simple avec l'API REST
-            $ch = curl_init('https://api.z.ai/api/paas/v4/chat/completions');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $apiKey,
-                'Content-Type: application/json'
-            ]);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-                'model' => 'glm-4-flash',
-                'messages' => [['role' => 'user', 'content' => 'test']],
-                'max_tokens' => 1
-            ]));
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        [$httpCode, $curlError, $response] = $this->curlTest(
+            'https://api.z.ai/api/paas/v4/chat/completions',
+            ['Authorization: Bearer ' . $apiKey, 'Content-Type: application/json'],
+            json_encode(['model' => 'glm-4-flash', 'messages' => [['role' => 'user', 'content' => 'ping']], 'max_tokens' => 1])
+        );
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $error = curl_error($ch);
-            curl_close($ch);
-
-            error_log('Z.AI Test - HTTP Code: ' . $httpCode);
-            if ($error) {
-                error_log('Z.AI Test - CURL Error: ' . $error);
-            } else {
-                error_log('Z.AI Test - Response: ' . substr($response, 0, 200));
-            }
-
-            // 200 = succès, 401 = clé invalide (mais API accessible)
-            return $httpCode === 200 || $httpCode === 401;
-        } catch (\Exception $e) {
-            error_log('Z.AI Test - Exception: ' . $e->getMessage());
-            return false;
+        if ($curlError) {
+            return [false, 'Erreur réseau : ' . $curlError];
         }
+        if ($httpCode === 200) {
+            return [true, 'Connexion Z.AI réussie'];
+        }
+        if ($httpCode === 401 || $httpCode === 403) {
+            return [false, "Clé API refusée par Z.AI (HTTP $httpCode)"];
+        }
+        if ($httpCode === 429) {
+            return [true, 'Z.AI accessible — quota temporairement dépassé (HTTP 429)'];
+        }
+
+        return [false, "Réponse inattendue de Z.AI (HTTP $httpCode)"];
     }
 
-    private function testOpenAiConnection(string $apiKey): bool
+    /** @return array{bool, string} */
+    private function testOpenAiConnection(string $apiKey): array
     {
-        if (empty($apiKey)) return false;
-
-        try {
-            $ch = curl_init('https://api.openai.com/v1/models');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: Bearer ' . $apiKey]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            return $httpCode === 200;
-        } catch (\Exception $e) {
-            return false;
+        if (empty($apiKey)) {
+            return [false, 'Clé API introuvable'];
         }
+
+        [$httpCode, $curlError] = $this->curlTest(
+            'https://api.openai.com/v1/models',
+            ['Authorization: Bearer ' . $apiKey]
+        );
+
+        if ($curlError) return [false, 'Erreur réseau : ' . $curlError];
+        if ($httpCode === 200) return [true, 'Connexion OpenAI réussie'];
+        if ($httpCode === 401) return [false, 'Clé API OpenAI invalide'];
+
+        return [false, "Réponse inattendue d'OpenAI (HTTP $httpCode)"];
     }
 
-    private function testGoogleVisionConnection(string $apiKey): bool
+    /** @return array{bool, string} */
+    private function testGoogleVisionConnection(string $apiKey): array
     {
-        if (empty($apiKey)) return false;
-
-        try {
-            $ch = curl_init('https://vision.googleapis.com/v1/operations?key=' . $apiKey);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            // Google Vision retourne 200 même sans operations
-            return $httpCode === 200;
-        } catch (\Exception $e) {
-            return false;
+        if (empty($apiKey)) {
+            return [false, 'Clé API introuvable'];
         }
+
+        [$httpCode, $curlError] = $this->curlTest(
+            'https://vision.googleapis.com/v1/operations?key=' . $apiKey,
+            ['Content-Type: application/json']
+        );
+
+        if ($curlError) return [false, 'Erreur réseau : ' . $curlError];
+        if ($httpCode === 200) return [true, 'Connexion Google Vision réussie'];
+        if ($httpCode === 400) return [true, 'Google Vision accessible (HTTP 400 — paramètre manquant attendu)'];
+        if ($httpCode === 403) return [false, 'Clé API Google refusée'];
+
+        return [false, "Réponse inattendue de Google Vision (HTTP $httpCode)"];
     }
 
-    private function testCustomApiConnection(string $endpoint, string $apiKey): bool
+    /** @return array{bool, string} */
+    private function testCustomApiConnection(string $endpoint, string $apiKey): array
     {
-        if (empty($endpoint)) return false;
-
-        try {
-            $headers = ['Content-Type: application/json'];
-            if (!empty($apiKey)) {
-                $headers[] = 'Authorization: Bearer ' . $apiKey;
-            }
-
-            $ch = curl_init($endpoint);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-            curl_setopt($ch, CURLOPT_NOBODY, true); // HEAD request
-
-            curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            return $httpCode > 0 && $httpCode < 500;
-        } catch (\Exception $e) {
-            return false;
+        if (empty($endpoint)) {
+            return [false, 'Endpoint non configuré'];
         }
+
+        $headers = ['Content-Type: application/json'];
+        if (!empty($apiKey)) {
+            $headers[] = 'Authorization: Bearer ' . $apiKey;
+        }
+
+        [$httpCode, $curlError] = $this->curlTest($endpoint, $headers);
+
+        if ($curlError) return [false, 'Erreur réseau : ' . $curlError];
+        if ($httpCode > 0 && $httpCode < 500) return [true, "API accessible (HTTP $httpCode)"];
+
+        return [false, $httpCode === 0 ? 'Connexion impossible' : "HTTP $httpCode"];
     }
 }
