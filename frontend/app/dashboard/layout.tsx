@@ -8,6 +8,7 @@ import { apiConfig } from "../../src/services/api/config";
 import { networkMonitor } from "../../src/services/network/monitor";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { ChatWidget } from "../../src/components/ChatWidget";
+import { useAppSettings } from "../../src/contexts/AppSettingsContext";
 import Link from "next/link";
 
 export default function DashboardLayout({
@@ -18,6 +19,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated, logout } = useAuthStore();
+  const { companyName, companyLogo } = useAppSettings();
   const [networkStatus, setNetworkStatus] = useState(
     networkMonitor.getStatus(),
   );
@@ -125,7 +127,11 @@ export default function DashboardLayout({
       <aside className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg hidden lg:block">
         <div className="flex flex-col h-full">
           <div className="p-4 border-b">
-            <h1 className="text-xl font-bold text-indigo-600">🛡️ GuardTrack</h1>
+            {companyLogo ? (
+              <img src={companyLogo} alt={companyName} className="h-10 object-contain mb-1" />
+            ) : (
+              <h1 className="text-xl font-bold text-indigo-600">🛡️ {companyName}</h1>
+            )}
             <p className="text-xs text-gray-500 mt-1">{user.role}</p>
           </div>
 
@@ -180,7 +186,11 @@ export default function DashboardLayout({
       >
         {/* Barre mobile avec notifications */}
         <div className="lg:hidden mb-4 flex items-center justify-between bg-white p-4 rounded-lg shadow">
-          <h1 className="text-xl font-bold text-indigo-600">🛡️ GuardTrack</h1>
+          {companyLogo ? (
+              <img src={companyLogo} alt={companyName} className="h-8 object-contain" />
+            ) : (
+              <h1 className="text-xl font-bold text-indigo-600">🛡️ {companyName}</h1>
+            )}
           <div className="flex items-center space-x-3">
             <NotificationBell />
             <button

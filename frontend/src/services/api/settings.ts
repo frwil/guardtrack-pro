@@ -1,4 +1,6 @@
 import { apiClient } from './client';
+import { apiConfig } from './config';
+import { getToken } from '../storage/token';
 
 export interface AiProvider {
   id: string;
@@ -63,12 +65,24 @@ export const settingsService = {
   async uploadLogo(file: File): Promise<{ url: string } | null> {
     const formData = new FormData();
     formData.append('logo', file);
-    
-    const response = await apiClient.post<{ url: string }>('/settings/logo', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data || null;
+
+    const token = getToken();
+    const baseURL = apiConfig.getApiUrl();
+
+    try {
+      const response = await fetch(`${baseURL}/settings/logo`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch {
+      return null;
+    }
   },
 };

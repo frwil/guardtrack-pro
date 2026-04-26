@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "../../src/stores/authStore";
 import { apiConfig } from "../../src/services/api/config";
 import { ApiConfigModal } from "../../src/components/ApiConfigModal";
+import { useAppSettings } from "../../src/contexts/AppSettingsContext";
 
 export default function LoginPage() {
   const router = useRouter();
   const { login, loginWithPin, isLoading, error, clearError } = useAuthStore();
+  const { companyName, companyLogo } = useAppSettings();
 
   const [mode, setMode] = useState<"password" | "pin">("password");
   const [email, setEmail] = useState("");
@@ -93,12 +95,16 @@ export default function LoginPage() {
           {/* En-tête */}
           <div>
             <div className="flex justify-center">
-              <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-2xl">🛡️</span>
-              </div>
+              {companyLogo ? (
+                <img src={companyLogo} alt={companyName} className="h-16 object-contain" />
+              ) : (
+                <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-2xl">🛡️</span>
+                </div>
+              )}
             </div>
             <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-              GuardTrack Pro
+              {companyName}
             </h2>
             <p className="mt-2 text-center text-sm text-gray-600">
               Application de suivi de présence

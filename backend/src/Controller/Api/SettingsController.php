@@ -192,7 +192,7 @@ class SettingsController extends AbstractController
         $repo = $this->entityManager->getRepository(AppSettings::class);
 
         // Charger uniquement les settings publics
-        $publicKeys = ['company_name', 'require_photo', 'require_pin', 'require_geolocation', 'geofencing_radius'];
+        $publicKeys = ['company_name', 'company_logo', 'require_photo', 'require_pin', 'require_geolocation', 'geofencing_radius'];
 
         $result = [];
         foreach ($publicKeys as $key) {
@@ -201,6 +201,35 @@ class SettingsController extends AbstractController
         }
 
         return $this->json($result);
+    }
+
+    #[Route('/logo', name: 'api_settings_logo_upload', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function uploadLogo(Request $request): JsonResponse
+    {
+        $file = $request->files->get('logo');
+        if (!$file) {
+            return $this->json(['error' => 'Aucun fichier fourni'], 400);
+        }
+
+        $allowedMimes = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp'];
+        $mimeType = $file->getMimeType();
+        if (!in_array($mimeType, $allowedMimes, true)) {
+            return $this->json(['error' => 'Format non supporté'], 400);
+        }
+
+        if ($file->getSize() > 2 * 1024 * 1024) {
+            return $this->json(['error' => 'Le fichier ne doit pas dépasser 2 Mo'], 400);
+        }
+
+        $content = file_get_contents($file->getPathname());
+        $dataUrl = 'data:' . $mimeType . ';base64,' . base64_encode($content);
+
+        $repo = $this->entityManager->getRepository(AppSettings::class);
+        $this->saveSetting($repo, 'company_logo', $dataUrl);
+        $this->entityManager->flush();
+
+        return $this->json(['url' => $dataUrl]);
     }
 
     private function getDefaultSettings(): array
