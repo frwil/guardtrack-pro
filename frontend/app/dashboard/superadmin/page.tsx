@@ -28,6 +28,7 @@ import {
   faClock,
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import { useAppSettings } from '../../../src/contexts/AppSettingsContext';
 
 interface SystemHealth {
   database: 'connected' | 'disconnected';
@@ -39,6 +40,7 @@ interface SystemHealth {
 
 export default function SuperAdminDashboardPage() {
   const { user } = useAuthStore();
+  const { currencySymbol } = useAppSettings();
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -176,7 +178,7 @@ export default function SuperAdminDashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Revenu mensuel</p>
-              <p className="text-2xl font-bold text-emerald-600">{stats.monthRevenue}€</p>
+              <p className="text-2xl font-bold text-emerald-600">{stats.monthRevenue} {currencySymbol}</p>
             </div>
             <FontAwesomeIcon icon={faChartBar} className="text-2xl text-emerald-300" />
           </div>

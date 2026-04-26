@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../../../src/stores/authStore";
+import { useAppSettings } from "../../../src/contexts/AppSettingsContext";
 import { dashboardService } from "../../../src/services/api/dashboard";
 import { usersService } from "../../../src/services/api/users";
 import { sitesService } from "../../../src/services/api/sites";
@@ -28,6 +29,7 @@ import {
 
 export default function AdminDashboardPage() {
   const { user } = useAuthStore();
+  const { currencySymbol } = useAppSettings();
   const [dashboard, setDashboard] = useState<any>(null);
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [recentSites, setRecentSites] = useState<any[]>([]);
@@ -94,7 +96,7 @@ export default function AdminDashboardPage() {
     },
     {
       name: "Revenu mensuel",
-      value: `${dashboard?.financials?.monthRevenue || 0}€`,
+      value: `${dashboard?.financials?.monthRevenue || 0} ${currencySymbol}`,
       icon: faMoneyBillTrendUp,
       color: "bg-emerald-500",
       href: "/dashboard/admin/finance",

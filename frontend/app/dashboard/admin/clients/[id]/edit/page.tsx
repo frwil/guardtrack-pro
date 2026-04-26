@@ -17,6 +17,7 @@ import {
   faEuroSign,
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import { useAppSettings } from '../../../../../../src/contexts/AppSettingsContext';
 
 type ClientFormData = Partial<Client> & {
   billingRate: string;
@@ -26,6 +27,7 @@ export default function EditClientPage() {
   const router = useRouter();
   const params = useParams();
   const clientId = parseInt(params.id as string);
+  const { currencySymbol } = useAppSettings();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -261,7 +263,7 @@ export default function EditClientPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <FontAwesomeIcon icon={faEuroSign} className="mr-2 text-indigo-600" />
-              Taux de facturation (€/heure) <span className="text-red-500">*</span>
+              Taux de facturation ({currencySymbol}/heure) <span className="text-red-500">*</span>
             </label>
             <input
               type="number"

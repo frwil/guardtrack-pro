@@ -197,22 +197,22 @@ export default function AuditPage() {
   return (
     <div className="space-y-6">
       {/* En-tête */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between">
+      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
               <FontAwesomeIcon icon={faScroll} className="mr-3 text-indigo-600" />
               Journal d'audit
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="text-gray-600 mt-1 text-sm">
               {filteredLogs.length} événement{filteredLogs.length > 1 ? 's' : ''} enregistré{filteredLogs.length > 1 ? 's' : ''}
             </p>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => handleExport('excel')}
               disabled={isExporting}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
+              className="flex-1 sm:flex-none px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center text-sm"
             >
               <FontAwesomeIcon icon={faFileExcel} className="mr-2" />
               Excel
@@ -220,14 +220,14 @@ export default function AuditPage() {
             <button
               onClick={() => handleExport('pdf')}
               disabled={isExporting}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center"
+              className="flex-1 sm:flex-none px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center justify-center text-sm"
             >
               <FontAwesomeIcon icon={faFilePdf} className="mr-2" />
               PDF
             </button>
             <button
               onClick={loadAuditLogs}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center"
+              className="flex-1 sm:flex-none px-3 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center justify-center text-sm"
             >
               <FontAwesomeIcon icon={faRotate} className="mr-2" />
               Actualiser
@@ -238,24 +238,24 @@ export default function AuditPage() {
 
       {/* Filtres */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="relative">
-            <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
               type="text"
               placeholder="Rechercher..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm"
             />
           </div>
 
           <div className="relative">
-            <FontAwesomeIcon icon={faFilter} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <FontAwesomeIcon icon={faFilter} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <select
               value={actionFilter}
               onChange={(e) => setActionFilter(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-sm"
             >
               <option value="">Toutes les actions</option>
               {actionTypes.map((action) => (
@@ -265,11 +265,11 @@ export default function AuditPage() {
           </div>
 
           <div className="relative">
-            <FontAwesomeIcon icon={faUser} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <FontAwesomeIcon icon={faUser} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <select
               value={userFilter}
               onChange={(e) => setUserFilter(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-sm"
             >
               <option value="">Tous les utilisateurs</option>
               {users.map((user) => (
@@ -278,22 +278,22 @@ export default function AuditPage() {
             </select>
           </div>
 
-          <div className="flex space-x-2">
-            <div className="relative flex-1">
-              <FontAwesomeIcon icon={faCalendar} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="relative">
+              <FontAwesomeIcon icon={faCalendar} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs" />
               <input
                 type="date"
                 value={dateRange.start}
                 onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                className="w-full pl-10 pr-2 py-2 border border-gray-300 rounded-lg"
+                className="w-full pl-7 pr-1 py-2 border border-gray-300 rounded-lg text-sm"
               />
             </div>
-            <div className="relative flex-1">
+            <div>
               <input
                 type="date"
                 value={dateRange.end}
                 onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                className="w-full px-2 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
               />
             </div>
           </div>
