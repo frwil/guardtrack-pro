@@ -6,6 +6,7 @@ import { useAuthStore } from "../../src/stores/authStore";
 import { networkMonitor } from "../../src/services/network/monitor";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { ChatWidget } from "../../src/components/ChatWidget";
+import { LanguageSwitcher } from "../../src/components/LanguageSwitcher";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faRotate, faSignOutAlt, faUser } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
@@ -127,6 +128,7 @@ export default function DashboardLayout({
         <div className="lg:hidden mb-4 flex items-center justify-between bg-white p-4 rounded-lg shadow">
           <h1 className="text-xl font-bold text-indigo-600">🛡️ GuardTrack</h1>
           <div className="flex items-center space-x-3">
+            <LanguageSwitcher />
             <NotificationBell />
             <button
               onClick={() => {
@@ -142,6 +144,7 @@ export default function DashboardLayout({
 
         {/* Header desktop avec notifications */}
         <div className="hidden lg:flex items-center justify-end mb-4 space-x-3">
+          <LanguageSwitcher variant="full" />
           <NotificationBell />
         </div>
 
