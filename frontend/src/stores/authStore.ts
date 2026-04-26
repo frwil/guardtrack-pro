@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../types';
 import { authService } from '../services/api/auth';
+import { offlineDB, hashPin } from '../services/storage/db';
 
 interface AuthState {
   user: User | null;
@@ -56,11 +57,18 @@ export const useAuthStore = create<AuthState>()(
 
       loginWithPin: async (email: string, pin: string) => {
         set({ isLoading: true, error: null });
-        
+
         try {
           const response = await authService.verifyPin({ email, pin });
-          
+
           if (response?.user) {
+            // Sauvegarder le hash du PIN pour la connexion offline
+            try {
+              const pinHash = await hashPin(pin);
+              await offlineDB.saveOfflineCredentials(email, pinHash, response.user);
+            } catch {
+              // Non-bloquant : la sauvegarde offline est best-effort
+            }
             set({
               user: response.user,
               isAuthenticated: true,
@@ -75,10 +83,28 @@ export const useAuthStore = create<AuthState>()(
             return false;
           }
         } catch (error) {
-          set({
-            error: 'Erreur de connexion',
-            isLoading: false,
-          });
+          // Fallback offline : vérifier le PIN contre le hash en cache
+          if (!navigator.onLine) {
+            try {
+              const cached = await offlineDB.getOfflineCredentials(email);
+              if (cached) {
+                const inputHash = await hashPin(pin);
+                if (inputHash === cached.pinHash) {
+                  set({
+                    user: cached.user as User,
+                    isAuthenticated: true,
+                    isLoading: false,
+                  });
+                  return true;
+                }
+              }
+            } catch {
+              // ignore
+            }
+            set({ error: 'PIN incorrect (mode hors ligne)', isLoading: false });
+          } else {
+            set({ error: 'Erreur de connexion', isLoading: false });
+          }
           return false;
         }
       },

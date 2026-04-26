@@ -18,15 +18,24 @@ export default function LoginPage() {
   const [currentApiUrl, setCurrentApiUrl] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
     setCurrentApiUrl(apiConfig.getApiUrl());
-    // Récupérer l'email sauvegardé si "remember me" était coché
     const savedEmail = localStorage.getItem("guardtrack_saved_email");
     if (savedEmail) {
       setEmail(savedEmail);
       setRememberMe(true);
     }
+    setIsOffline(!navigator.onLine);
+    const onOnline  = () => setIsOffline(false);
+    const onOffline = () => setIsOffline(true);
+    window.addEventListener('online',  onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,6 +46,12 @@ export default function LoginPage() {
       localStorage.setItem("guardtrack_saved_email", email);
     } else {
       localStorage.removeItem("guardtrack_saved_email");
+    }
+
+    // En mode hors ligne, le mot de passe ne peut pas être vérifié — forcer le PIN
+    if (isOffline && mode === "password") {
+      switchMode("pin");
+      return;
     }
 
     let success = false;
@@ -115,6 +130,13 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
+
+          {/* Bannière mode hors ligne */}
+          {isOffline && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
+              📴 <strong>Mode hors ligne</strong> — Utilisez votre code PIN si vous vous êtes déjà connecté depuis cet appareil.
+            </div>
+          )}
 
           {/* Sélecteur de mode */}
           <div className="flex justify-center space-x-2 bg-gray-100 p-1 rounded-lg">
