@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { settingsService, AppSettings, AiProvider } from '../../../../src/services/api/settings';
-import { CURRENCIES } from '../../../../src/contexts/AppSettingsContext';
+import { CURRENCIES, useAppSettings } from '../../../../src/contexts/AppSettingsContext';
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -10,6 +10,10 @@ export default function AdminSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'general' | 'security' | 'ai' | 'sync'>('general');
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const { refreshSettings } = useAppSettings();
 
   useEffect(() => {
     loadSettings();
@@ -24,6 +28,32 @@ export default function AdminSettingsPage() {
       console.error('Erreur de chargement:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const handleLogoUpload = async () => {
+    const file = logoInputRef.current?.files?.[0];
+    if (!file) return;
+    setIsUploadingLogo(true);
+    try {
+      const result = await settingsService.uploadLogo(file);
+      if (result?.url) {
+        setSettings(s => s ? { ...s, company: { ...s.company, logo: result.url } } : s);
+        setLogoPreview(null);
+        if (logoInputRef.current) logoInputRef.current.value = '';
+        await refreshSettings();
+        alert('✅ Logo mis à jour');
+      }
+    } catch {
+      alert('❌ Erreur lors de l\'upload du logo');
+    } finally {
+      setIsUploadingLogo(false);
     }
   };
 
@@ -105,6 +135,44 @@ export default function AdminSettingsPage() {
           {/* Onglet Général */}
           {activeTab === 'general' && (
             <div className="space-y-4">
+              {/* Logo */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Logo de l'entreprise</label>
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center overflow-hidden bg-gray-50">
+                    {(logoPreview || settings.company.logo) ? (
+                      <img
+                        src={logoPreview || settings.company.logo!}
+                        alt="Logo"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-3xl">🏢</span>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+                      onChange={handleLogoChange}
+                      className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    />
+                    <p className="text-xs text-gray-400">JPEG, PNG, WebP, SVG — max 2 Mo</p>
+                    {logoPreview && (
+                      <button
+                        type="button"
+                        onClick={handleLogoUpload}
+                        disabled={isUploadingLogo}
+                        className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {isUploadingLogo ? '⏳ Upload...' : '⬆️ Envoyer le logo'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nom de l'entreprise

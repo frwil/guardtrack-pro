@@ -3,23 +3,22 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../../../src/stores/authStore';
 import { incidentsService, Incident } from '../../../../src/services/api/incidents';
+import { useTranslation } from '../../../../src/contexts/I18nContext';
 import Link from 'next/link';
 
 export default function AgentIncidentsPage() {
   const { user } = useAuthStore();
+  const { t } = useTranslation();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('all');
 
-  useEffect(() => {
-    loadIncidents();
-  }, []);
+  useEffect(() => { loadIncidents(); }, []);
 
   const loadIncidents = async () => {
     setIsLoading(true);
     try {
-      const data = await incidentsService.getMyIncidents();
-      setIncidents(data);
+      setIncidents(await incidentsService.getMyIncidents());
     } catch (error) {
       console.error('Erreur de chargement:', error);
     } finally {
@@ -39,10 +38,10 @@ export default function AgentIncidentsPage() {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { color: string; text: string; icon: string }> = {
-      OPEN: { color: 'bg-red-100 text-red-800', text: 'Ouvert', icon: '🔴' },
-      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', text: 'En cours', icon: '🟡' },
-      RESOLVED: { color: 'bg-green-100 text-green-800', text: 'Résolu', icon: '🟢' },
-      CLOSED: { color: 'bg-gray-100 text-gray-800', text: 'Fermé', icon: '⚪' },
+      OPEN:        { color: 'bg-red-100 text-red-800',      text: t('common.open'),       icon: '🔴' },
+      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', text: t('common.inProgress'), icon: '🟡' },
+      RESOLVED:    { color: 'bg-green-100 text-green-800',  text: t('common.resolved'),   icon: '🟢' },
+      CLOSED:      { color: 'bg-gray-100 text-gray-800',    text: t('common.closed'),     icon: '⚪' },
     };
     return badges[status] || { color: 'bg-gray-100 text-gray-800', text: status, icon: '📌' };
   };
@@ -64,7 +63,7 @@ export default function AgentIncidentsPage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-4 text-gray-600">Chargement des incidents...</p>
+          <p className="mt-4 text-gray-600">{t('agent.incidents.loading')}</p>
         </div>
       </div>
     );
@@ -72,45 +71,40 @@ export default function AgentIncidentsPage() {
 
   return (
     <div className="space-y-6">
-      {/* En-tête */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center">
               <span className="mr-3">⚠️</span>
-              Mes incidents
+              {t('agent.incidents.title')}
             </h1>
-            <p className="text-gray-600 mt-1">
-              Historique de vos déclarations d'incidents
-            </p>
+            <p className="text-gray-600 mt-1">{t('agent.incidents.subtitle')}</p>
           </div>
           <Link
             href="/dashboard/agent/incidents/create"
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center"
           >
             <span className="mr-2">🚨</span>
-            Déclarer un incident
+            {t('agent.incidents.report')}
           </Link>
         </div>
       </div>
 
-      {/* Statistiques */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">Total</p>
+          <p className="text-sm text-gray-500">{t('agent.incidents.total')}</p>
           <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">En cours</p>
+          <p className="text-sm text-gray-500">{t('agent.incidents.inProgress')}</p>
           <p className="text-2xl font-bold text-yellow-600">{stats.open}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">Résolus</p>
+          <p className="text-sm text-gray-500">{t('agent.incidents.resolvedCount')}</p>
           <p className="text-2xl font-bold text-green-600">{stats.resolved}</p>
         </div>
       </div>
 
-      {/* Filtres */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex space-x-2">
           {(['all', 'open', 'resolved'] as const).map((f) => (
@@ -118,37 +112,33 @@ export default function AgentIncidentsPage() {
               key={f}
               onClick={() => setFilter(f)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === f
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                filter === f ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {f === 'all' && 'Tous'}
-              {f === 'open' && '🟡 En cours'}
-              {f === 'resolved' && '🟢 Résolus'}
+              {f === 'all'      && t('agent.incidents.all')}
+              {f === 'open'     && `🟡 ${t('agent.incidents.inProgress')}`}
+              {f === 'resolved' && `🟢 ${t('agent.incidents.resolvedCount')}`}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Liste des incidents */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {filteredIncidents.length === 0 ? (
           <div className="text-center py-12">
             <span className="text-5xl mb-4 block">📋</span>
-            <p className="text-gray-500 text-lg">Aucun incident déclaré</p>
+            <p className="text-gray-500 text-lg">{t('agent.incidents.none')}</p>
             <Link
               href="/dashboard/agent/incidents/create"
               className="mt-4 inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
             >
-              Déclarer un incident
+              {t('agent.incidents.report')}
             </Link>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
             {filteredIncidents.map((incident) => {
               const statusBadge = getStatusBadge(incident.status);
-              
               return (
                 <div key={incident.id} className="p-6 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between">
@@ -162,45 +152,41 @@ export default function AgentIncidentsPage() {
                           {statusBadge.icon} {statusBadge.text}
                         </span>
                       </div>
-                      
                       <p className="text-gray-600 mb-3">{incident.description}</p>
-                      
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
                         <div>
-                          <span className="text-gray-500">Catégorie :</span>{' '}
+                          <span className="text-gray-500">{t('agent.incidents.category')}</span>{' '}
                           <span>{incident.category}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Site :</span>{' '}
+                          <span className="text-gray-500">{t('agent.incidents.site')}</span>{' '}
                           <span>{incident.site.name}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Déclaré le :</span>{' '}
+                          <span className="text-gray-500">{t('agent.incidents.declaredAt')}</span>{' '}
                           <span>{new Date(incident.reportedAt).toLocaleString('fr-FR')}</span>
                         </div>
                         {incident.assignedTo && (
                           <div>
-                            <span className="text-gray-500">Assigné à :</span>{' '}
+                            <span className="text-gray-500">{t('agent.incidents.assignedTo')}</span>{' '}
                             <span>{incident.assignedTo.fullName}</span>
                           </div>
                         )}
                         {incident.resolvedAt && (
                           <div>
-                            <span className="text-gray-500">Résolu le :</span>{' '}
+                            <span className="text-gray-500">{t('agent.incidents.resolvedAt')}</span>{' '}
                             <span>{new Date(incident.resolvedAt).toLocaleString('fr-FR')}</span>
                           </div>
                         )}
                       </div>
-                      
                       {incident.resolution && (
                         <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-500">Résolution :</p>
+                          <p className="text-sm text-gray-500">{t('agent.incidents.resolution')}</p>
                           <p className="text-gray-700">{incident.resolution}</p>
                         </div>
                       )}
-
                       {incident.hasPhotos && (
-                        <p className="text-xs text-gray-400 mt-2">📸 Photos disponibles</p>
+                        <p className="text-xs text-gray-400 mt-2">📸 {t('agent.incidents.photos')}</p>
                       )}
                     </div>
                   </div>

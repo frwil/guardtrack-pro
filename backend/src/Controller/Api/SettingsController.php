@@ -186,6 +186,41 @@ class SettingsController extends AbstractController
         ]);
     }
 
+    #[Route('/logo', name: 'api_settings_logo_upload', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function uploadLogo(Request $request): JsonResponse
+    {
+        $file = $request->files->get('logo');
+        if (!$file) {
+            return $this->json(['error' => 'No file provided'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+        if (!in_array($file->getMimeType(), $allowedMimes)) {
+            return $this->json(['error' => 'Type de fichier non supporté'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if ($file->getSize() > 2 * 1024 * 1024) {
+            return $this->json(['error' => 'Fichier trop volumineux (max 2 Mo)'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $uploadDir = $this->getParameter('kernel.project_dir') . '/public/uploads/logos';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $filename = 'logo_' . uniqid() . '.' . ($file->guessExtension() ?? 'png');
+        $file->move($uploadDir, $filename);
+
+        $url = '/uploads/logos/' . $filename;
+
+        $repo = $this->entityManager->getRepository(AppSettings::class);
+        $this->saveSetting($repo, 'company_logo', $url);
+        $this->entityManager->flush();
+
+        return $this->json(['url' => $url]);
+    }
+
     // ✅ Route publique pour les settings essentiels (pas d'auth requise)
     #[Route('/public', name: 'api_settings_public', methods: ['GET'])]
     public function getPublicSettings(): JsonResponse
@@ -194,7 +229,7 @@ class SettingsController extends AbstractController
         $repo = $this->entityManager->getRepository(AppSettings::class);
 
         // Charger uniquement les settings publics
-        $publicKeys = ['company_name', 'company_currency', 'require_photo', 'require_pin', 'require_geolocation', 'geofencing_radius'];
+        $publicKeys = ['company_name', 'company_logo', 'company_currency', 'require_photo', 'require_pin', 'require_geolocation', 'geofencing_radius'];
 
         $result = [];
         foreach ($publicKeys as $key) {
