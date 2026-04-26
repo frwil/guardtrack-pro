@@ -1,19 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { settingsService, AppSettings, AiProvider } from '../../../../src/services/api/settings';
-import { useAppSettings } from '../../../../src/contexts/AppSettingsContext';
-import { optimizeLogo } from '../../../../src/utils/logoOptimizer';
+import { CURRENCIES } from '../../../../src/contexts/AppSettingsContext';
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [activeTab, setActiveTab] = useState<'general' | 'security' | 'ai' | 'sync'>('general');
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const { refreshBranding } = useAppSettings();
 
   useEffect(() => {
     loadSettings();
@@ -50,26 +46,6 @@ export default function AdminSettingsPage() {
     const result = await settingsService.testAiProvider(providerId, provider?.apiKey);
     setTestResult(result);
     setTimeout(() => setTestResult(null), 5000);
-  };
-
-  const handleLogoUpload = async (file: File) => {
-    if (!file) return;
-    setIsUploadingLogo(true);
-    try {
-      const optimized = await optimizeLogo(file);
-      const result = await settingsService.uploadLogo(optimized);
-      if (result?.url) {
-        setSettings(s => s ? { ...s, company: { ...s.company, logo: result.url } } : s);
-        await refreshBranding();
-        alert('✅ Logo mis à jour avec succès');
-      } else {
-        alert('❌ Erreur lors de l\'upload du logo');
-      }
-    } catch {
-      alert('❌ Erreur lors de l\'upload du logo');
-    } finally {
-      setIsUploadingLogo(false);
-    }
   };
 
   if (isLoading || !settings) {
@@ -128,75 +104,7 @@ export default function AdminSettingsPage() {
         <div className="p-6">
           {/* Onglet Général */}
           {activeTab === 'general' && (
-            <div className="space-y-6">
-              {/* Logo */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Logo de l'entreprise
-                </label>
-                <div className="flex flex-col gap-4">
-                  {/* Prévisualisation logo + nom */}
-                  <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                    <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide">Aperçu barre latérale</p>
-                    <div className="flex flex-col gap-1">
-                      {settings.company.logo ? (
-                        <img
-                          src={settings.company.logo}
-                          alt="Logo"
-                          className="h-8 object-contain object-left"
-                        />
-                      ) : (
-                        <span className="text-2xl">🛡️</span>
-                      )}
-                      <p className="text-base font-bold text-indigo-600 leading-tight">{settings.company.name || 'Nom de l\'entreprise'}</p>
-                    </div>
-                  </div>
-
-                  {/* Contrôles upload */}
-                  <div className="flex items-start gap-4">
-                    <div className="w-20 h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-white overflow-hidden flex-shrink-0">
-                      {settings.company.logo ? (
-                        <img src={settings.company.logo} alt="Logo" className="w-full h-full object-contain p-1" />
-                      ) : (
-                        <span className="text-2xl text-gray-300">🖼️</span>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <input
-                        ref={logoInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleLogoUpload(file);
-                        }}
-                      />
-                      <button
-                        onClick={() => logoInputRef.current?.click()}
-                        disabled={isUploadingLogo}
-                        className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                      >
-                        {isUploadingLogo ? '⏳ Optimisation...' : '📁 Choisir un logo'}
-                      </button>
-                      {settings.company.logo && (
-                        <button
-                          onClick={async () => {
-                            setSettings(s => s ? { ...s, company: { ...s.company, logo: undefined } } : s);
-                            await settingsService.updateSettings({ company: { ...settings.company, logo: '' } });
-                            await refreshBranding();
-                          }}
-                          className="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
-                        >
-                          🗑️ Supprimer le logo
-                        </button>
-                      )}
-                      <p className="text-xs text-gray-500">PNG, JPG, SVG ou WebP — optimisé automatiquement à max 300×100&nbsp;px</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nom de l'entreprise
@@ -238,6 +146,29 @@ export default function AdminSettingsPage() {
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  💱 Devise
+                </label>
+                <select
+                  value={settings.company.currency ?? 'XOF'}
+                  onChange={(e) => setSettings({
+                    ...settings,
+                    company: { ...settings.company, currency: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                >
+                  {CURRENCIES.map(({ code, name, symbol }) => (
+                    <option key={code} value={code}>
+                      {code} — {symbol} — {name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Utilisée dans le module Finance et sur les rapports.
+                </p>
               </div>
             </div>
           )}
@@ -322,55 +253,122 @@ export default function AdminSettingsPage() {
                 </select>
               </div>
 
-              {/* Info : clés API via env vars */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-700">
-                  ℹ️ Les clés API sont configurées via les variables d'environnement du serveur. Cette page permet uniquement de vérifier que la connexion au fournisseur fonctionne correctement.
-                </p>
-              </div>
-
-              {/* Test de connexion pour les fournisseurs externes */}
-              {['zai', 'openai', 'google', 'custom'].includes(settings.ai.provider) && (
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-800">
-                        {settings.ai.provider === 'zai' && 'Z.AI'}
-                        {settings.ai.provider === 'openai' && 'OpenAI (GPT-4 Vision)'}
-                        {settings.ai.provider === 'google' && 'Google Vision'}
-                        {settings.ai.provider === 'custom' && 'API Personnalisée'}
-                      </p>
-                      <p className="text-sm text-gray-500 mt-0.5">Fournisseur actif</p>
-                    </div>
-                    {testResult ? (
-                      <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-                        testResult.success
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}>
-                        <span className={`w-2 h-2 rounded-full ${testResult.success ? 'bg-green-500' : 'bg-red-500'}`} />
-                        {testResult.success ? 'Connexion OK' : 'Échec de connexion'}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleTestAi(settings.ai.provider)}
-                        className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-                      >
-                        🧪 Tester la connexion
-                      </button>
-                    )}
+              {/* Configuration Z.AI */}
+              {settings.ai.provider === 'zai' && (
+                <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+                  <h3 className="font-medium">Configuration Z.AI</h3>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Clé API</label>
+                    <input
+                      type="password"
+                      placeholder="zai_..."
+                      value={settings.ai.providers?.find(p => p.id === 'zai')?.apiKey || ''}
+                      onChange={(e) => {
+                        const providers = settings.ai.providers || [];
+                        const index = providers.findIndex(p => p.id === 'zai');
+                        if (index >= 0) {
+                          providers[index].apiKey = e.target.value;
+                        } else {
+                          providers.push({ id: 'zai', name: 'Z.AI', enabled: true, apiKey: e.target.value });
+                        }
+                        setSettings({ ...settings, ai: { ...settings.ai, providers } });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
                   </div>
-                  {testResult && (
-                    <div className="mt-3 flex items-center justify-between">
-                      <p className="text-sm text-gray-600">{testResult.message}</p>
-                      <button
-                        onClick={() => setTestResult(null)}
-                        className="text-xs text-gray-400 hover:text-gray-600 ml-4"
-                      >
-                        Retester
-                      </button>
-                    </div>
-                  )}
+                  <button
+                    onClick={() => handleTestAi('zai')}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    🧪 Tester la connexion
+                  </button>
+                </div>
+              )}
+
+              {/* Configuration OpenAI */}
+              {settings.ai.provider === 'openai' && (
+                <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+                  <h3 className="font-medium">Configuration OpenAI</h3>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Clé API</label>
+                    <input
+                      type="password"
+                      placeholder="sk-..."
+                      value={settings.ai.providers?.find(p => p.id === 'openai')?.apiKey || ''}
+                      onChange={(e) => {
+                        const providers = settings.ai.providers || [];
+                        const index = providers.findIndex(p => p.id === 'openai');
+                        if (index >= 0) {
+                          providers[index].apiKey = e.target.value;
+                        } else {
+                          providers.push({ id: 'openai', name: 'OpenAI', enabled: true, apiKey: e.target.value, model: 'gpt-4-vision-preview' });
+                        }
+                        setSettings({ ...settings, ai: { ...settings.ai, providers } });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleTestAi('openai')}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    🧪 Tester la connexion
+                  </button>
+                </div>
+              )}
+
+              {/* Configuration API Personnalisée */}
+              {settings.ai.provider === 'custom' && (
+                <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+                  <h3 className="font-medium">Configuration API Personnalisée</h3>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Endpoint URL</label>
+                    <input
+                      type="url"
+                      placeholder="https://api.example.com/v1/analyze"
+                      value={settings.ai.providers?.find(p => p.id === 'custom')?.endpoint || ''}
+                      onChange={(e) => {
+                        const providers = settings.ai.providers || [];
+                        const index = providers.findIndex(p => p.id === 'custom');
+                        if (index >= 0) {
+                          providers[index].endpoint = e.target.value;
+                        } else {
+                          providers.push({ id: 'custom', name: 'API Personnalisée', enabled: true, endpoint: e.target.value });
+                        }
+                        setSettings({ ...settings, ai: { ...settings.ai, providers } });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Clé API (optionnel)</label>
+                    <input
+                      type="password"
+                      placeholder="Bearer token..."
+                      value={settings.ai.providers?.find(p => p.id === 'custom')?.apiKey || ''}
+                      onChange={(e) => {
+                        const providers = settings.ai.providers || [];
+                        const index = providers.findIndex(p => p.id === 'custom');
+                        if (index >= 0) {
+                          providers[index].apiKey = e.target.value;
+                        }
+                        setSettings({ ...settings, ai: { ...settings.ai, providers } });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleTestAi('custom')}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    🧪 Tester la connexion
+                  </button>
+                </div>
+              )}
+
+              {testResult && (
+                <div className={`p-4 rounded-lg ${testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                  {testResult.message}
                 </div>
               )}
 

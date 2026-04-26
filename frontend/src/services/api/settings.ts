@@ -17,6 +17,7 @@ export interface AppSettings {
     email: string;
     phone: string;
     logo?: string;
+    currency?: string;
   };
   security: {
     requirePhoto: boolean;

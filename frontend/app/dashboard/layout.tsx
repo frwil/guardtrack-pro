@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "../../src/stores/authStore";
-import { getToken, removeToken } from "../../src/services/storage/token";
-import { apiConfig } from "../../src/services/api/config";
 import { networkMonitor } from "../../src/services/network/monitor";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { ChatWidget } from "../../src/components/ChatWidget";
-import { useAppSettings } from "../../src/contexts/AppSettingsContext";
+import { LanguageSwitcher } from "../../src/components/LanguageSwitcher";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faRotate, faSignOutAlt, faUser } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
 
 export default function DashboardLayout({
@@ -19,76 +19,20 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated, logout } = useAuthStore();
-  const { companyName, companyLogo } = useAppSettings();
   const [networkStatus, setNetworkStatus] = useState(
     networkMonitor.getStatus(),
   );
-  const [isVerifying, setIsVerifying] = useState(true);
-
-  // ✅ Vérification du token AVANT d'afficher le contenu
-  useEffect(() => {
-    const verifyToken = async () => {
-      const token = getToken();
-
-      if (!token) {
-        logout();
-        router.push("/login");
-        return;
-      }
-
-      try {
-        const baseURL = apiConfig.getApiUrl();
-        const response = await fetch(`${baseURL}/auth/me`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          mode: "cors",
-        });
-
-        if (!response.ok) {
-          removeToken();
-          logout();
-          router.push("/login");
-          return;
-        }
-
-        setIsVerifying(false);
-      } catch (error) {
-        console.warn("Impossible de vérifier le token, on continue:", error);
-        setIsVerifying(false);
-      }
-    };
-
-    verifyToken();
-  }, [router, logout]);
 
   useEffect(() => {
-    if (!isVerifying && !isAuthenticated) {
+    if (!isAuthenticated) {
       router.push("/login");
     }
-  }, [isVerifying, isAuthenticated, router]);
+  }, [isAuthenticated, router]);
 
   useEffect(() => {
     const unsubscribe = networkMonitor.subscribe(setNetworkStatus);
     return unsubscribe;
   }, []);
-
-  // ✅ Afficher un loader PENDANT la vérification du token
-  if (isVerifying) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-4 text-gray-600">
-            Vérification de l'authentification...
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   if (!user) {
     return (
@@ -127,30 +71,38 @@ export default function DashboardLayout({
       <aside className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg hidden lg:block">
         <div className="flex flex-col h-full">
           <div className="p-4 border-b">
-            {companyLogo && (
-              <img src={companyLogo} alt={companyName} className="h-8 object-contain object-left mb-1" />
-            )}
-            <h1 className="text-base font-bold text-indigo-600 leading-tight">
-              {!companyLogo && '🛡️ '}{companyName}
-            </h1>
-            <p className="text-xs text-gray-500 mt-0.5">{user.role}</p>
+            <h1 className="text-xl font-bold text-indigo-600">🛡️ GuardTrack</h1>
+            <p className="text-xs text-gray-500 mt-1">{user.role}</p>
           </div>
 
-          <nav className="flex-1 p-4 space-y-1">
-            {navigation.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  pathname === item.href
-                    ? "bg-indigo-50 text-indigo-700"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                <span className="mr-3">{item.icon}</span>
-                {item.name}
-              </Link>
-            ))}
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+            {navigation.map((item, idx) => {
+              const prevGroup = navigation[idx - 1]?.group;
+              const showHeader = item.group && item.group !== prevGroup;
+              return (
+                <div key={item.href}>
+                  {showHeader && (
+                    <div className="pt-3 pb-1 px-3">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                        {item.group}
+                      </p>
+                      <hr className="mt-1 border-gray-100" />
+                    </div>
+                  )}
+                  <Link
+                    href={item.href}
+                    className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      pathname === item.href
+                        ? "bg-indigo-50 text-indigo-700"
+                        : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <span className="mr-3">{item.icon}</span>
+                    {item.name}
+                  </Link>
+                </div>
+              );
+            })}
           </nav>
 
           <div className="p-4 border-t">
@@ -187,15 +139,9 @@ export default function DashboardLayout({
       >
         {/* Barre mobile avec notifications */}
         <div className="lg:hidden mb-4 flex items-center justify-between bg-white p-4 rounded-lg shadow">
-          <div className="flex items-center gap-2">
-              {companyLogo && (
-                <img src={companyLogo} alt={companyName} className="h-7 object-contain" />
-              )}
-              <h1 className="text-lg font-bold text-indigo-600">
-                {!companyLogo && '🛡️ '}{companyName}
-              </h1>
-            </div>
+          <h1 className="text-xl font-bold text-indigo-600">🛡️ GuardTrack</h1>
           <div className="flex items-center space-x-3">
+            <LanguageSwitcher />
             <NotificationBell />
             <button
               onClick={() => {
@@ -211,6 +157,7 @@ export default function DashboardLayout({
 
         {/* Header desktop avec notifications */}
         <div className="hidden lg:flex items-center justify-end mb-4 space-x-3">
+          <LanguageSwitcher variant="full" />
           <NotificationBell />
         </div>
 
@@ -235,7 +182,7 @@ export default function DashboardLayout({
         </div>
       </nav>
 
-      {/* ✅ ChatWidget rendu APRÈS vérification du token */}
+      {/* ✅ Widget de chat - AJOUTÉ ICI */}
       <ChatWidget />
     </div>
   );
@@ -344,12 +291,6 @@ function getNavigationByRole(role: string) {
         href: "/dashboard/superviseur/disputes",
         icon: "⚖️",
       },
-      {
-        name: "Incidents",
-        shortName: "Incidents",
-        href: "/dashboard/superviseur/incidents",
-        icon: "⚠️",
-      },
     ],
     ADMIN: [
       {
@@ -389,10 +330,32 @@ function getNavigationByRole(role: string) {
         icon: "⚠️",
       },
       {
-        name: "Incidents",
-        shortName: "Incidents",
-        href: "/dashboard/admin/incidents",
-        icon: "⚠️",
+        name: "Sites",
+        shortName: "Sites",
+        href: "/dashboard/superviseur/sites",
+        icon: "🏢",
+        group: "Supervision",
+      },
+      {
+        name: "Affectations",
+        shortName: "Affect.",
+        href: "/dashboard/superviseur/assignments",
+        icon: "📋",
+        group: "Supervision",
+      },
+      {
+        name: "Rapports",
+        shortName: "Rapports",
+        href: "/dashboard/superviseur/reports",
+        icon: "📈",
+        group: "Supervision",
+      },
+      {
+        name: "Litiges",
+        shortName: "Litiges",
+        href: "/dashboard/superviseur/disputes",
+        icon: "⚖️",
+        group: "Supervision",
       },
     ],
     SUPERADMIN: [
@@ -421,10 +384,74 @@ function getNavigationByRole(role: string) {
         icon: "🧩",
       },
       {
+        name: "Tableau de bord Admin",
+        shortName: "Admin",
+        href: "/dashboard/admin",
+        icon: "⚙️",
+        group: "Administration",
+      },
+      {
+        name: "Utilisateurs",
+        shortName: "Users",
+        href: "/dashboard/admin/users",
+        icon: "👤",
+        group: "Administration",
+      },
+      {
+        name: "Clients",
+        shortName: "Clients",
+        href: "/dashboard/admin/clients",
+        icon: "🏛️",
+        group: "Administration",
+      },
+      {
+        name: "Finance",
+        shortName: "Finance",
+        href: "/dashboard/admin/finance",
+        icon: "💰",
+        group: "Administration",
+      },
+      {
+        name: "Paramètres",
+        shortName: "Params",
+        href: "/dashboard/admin/settings",
+        icon: "🔧",
+        group: "Administration",
+      },
+      {
         name: "Conflits",
         shortName: "Conflits",
-        href: "/dashboard/superadmin/conflicts",
+        href: "/dashboard/admin/conflicts",
         icon: "⚠️",
+        group: "Administration",
+      },
+      {
+        name: "Sites",
+        shortName: "Sites",
+        href: "/dashboard/superviseur/sites",
+        icon: "🏢",
+        group: "Supervision",
+      },
+      {
+        name: "Affectations",
+        shortName: "Affect.",
+        href: "/dashboard/superviseur/assignments",
+        icon: "📋",
+        group: "Supervision",
+      },
+      {
+        name: "Rapports",
+        shortName: "Rapports",
+        href: "/dashboard/superviseur/reports",
+        icon: "📈",
+        group: "Supervision",
+      },
+      {
+        name: "Litiges",
+        shortName: "Litiges",
+        href: "/dashboard/superviseur/disputes",
+        icon: "⚖️",
+        group: "Supervision",
       },
     ],
   };

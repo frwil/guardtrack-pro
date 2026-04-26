@@ -5,6 +5,7 @@ import { presencesService } from "../api/presences";
 import { roundsService } from "../api/rounds";
 import { incidentsService } from "../api/incidents";
 import { serverTime } from "../time/serverTime";
+import { conflictService } from "../api/conflict";
 
 interface SyncResult {
   success: boolean;
@@ -17,6 +18,7 @@ interface SyncResult {
 class SyncManager {
   private syncInProgress = false;
   private syncInterval: NodeJS.Timeout | null = null;
+  private networkUnsubscribe: (() => void) | null = null;
 
   // Seuils de validation temporelle
   private readonly MAX_TIME_DRIFT = 300000; // 5 minutes en ms
@@ -487,22 +489,27 @@ class SyncManager {
           );
 
           if (success) {
-            // Mettre à jour avec le statut de validation (VALIDATED ou CONFLICT)
-            await offlineDB.updateSyncOperation(op.id, {
-              ...op,
-              validationStatus,
-              validationNote,
-              syncedAt: new Date().toISOString(),
-            });
-            await offlineDB.deleteSyncOperation(op.id);
-            result.syncedCount++;
-
-            // Si conflit, logger mais ne pas bloquer
             if (validationStatus === "CONFLICT") {
-              console.warn(
-                `⚠️ Opération synchronisée avec conflit: ${validationNote}`,
-              );
+              // Escalader au back-office admin avant suppression locale
+              try {
+                await conflictService.reportBatch([{
+                  operationId: op.id,
+                  operation: op,
+                  conflictType: isFraudulent ? 'FRAUD_SUSPICION' : 'TIME_DRIFT',
+                  reason: validationNote || 'Conflit détecté',
+                  clientData: op.data,
+                  resolution: 'PENDING',
+                }]);
+              } catch (err) {
+                console.error('Impossible d\'escalader le conflit au serveur:', err);
+              }
+              // Supprimer du device pour éviter les synchros en boucle
+              await offlineDB.deleteSyncOperation(op.id);
+              console.warn(`⚠️ Conflit escaladé à l'admin et supprimé localement: ${validationNote}`);
+            } else {
+              await offlineDB.deleteSyncOperation(op.id);
             }
+            result.syncedCount++;
           } else {
             const newAttempts = (op.attempts || 0) + 1;
             await offlineDB.updateSyncOperation(op.id, {
@@ -640,6 +647,14 @@ class SyncManager {
   startPeriodicSync(intervalMs: number = 60000): void {
     if (this.syncInterval) return;
 
+    // Déclencher une synchro immédiate dès que le réseau redevient stable
+    this.networkUnsubscribe = networkMonitor.subscribe((status) => {
+      if (status === 'online') {
+        console.log('🌐 Réseau stable - déclenchement de la synchronisation');
+        this.processSyncQueue().catch(console.error);
+      }
+    });
+
     this.syncInterval = setInterval(() => {
       if (networkMonitor.isSyncAllowed()) {
         this.processSyncQueue().catch(console.error);
@@ -655,8 +670,12 @@ class SyncManager {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
-      console.log("⏹️ Synchronisation périodique arrêtée");
     }
+    if (this.networkUnsubscribe) {
+      this.networkUnsubscribe();
+      this.networkUnsubscribe = null;
+    }
+    console.log("⏹️ Synchronisation périodique arrêtée");
   }
 
   /**

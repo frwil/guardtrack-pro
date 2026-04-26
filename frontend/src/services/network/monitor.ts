@@ -12,7 +12,7 @@ class NetworkMonitor {
   private status: NetworkStatus = 'online';
   private lastOnlineAt: string | null = null;
   private lastOfflineAt: string | null = null;
-  private reconnectionHistory: number[] = []; // Timestamps des reconnexions
+  private reconnectionHistory: number[] = [];
   private unstableThreshold = 3; // 3 reconnexions en 2 minutes = instable
   private unstableTimeWindow = 120000; // 2 minutes en ms
   private pauseSyncUntil: string | null = null;
@@ -23,10 +23,54 @@ class NetworkMonitor {
       window.addEventListener('online', () => this.handleOnline());
       window.addEventListener('offline', () => this.handleOffline());
       this.status = navigator.onLine ? 'online' : 'offline';
+
+      // Écouter les changements de type de connexion (API Network Information)
+      const conn = (navigator as any).connection;
+      if (conn) {
+        conn.addEventListener('change', () => this.handleConnectionChange(conn));
+      }
     }
   }
 
-  private handleOnline(): void {
+  private handleConnectionChange(conn: any): void {
+    if (this.status === 'offline') return;
+    if (conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g') {
+      if (this.status !== 'unstable') {
+        this.status = 'unstable';
+        this.pauseSyncUntil = new Date(Date.now() + 300000).toISOString();
+        console.warn('⚠️ Connexion lente détectée - Synchronisations en pause pour 5 minutes');
+        this.notifyListeners();
+      }
+    }
+  }
+
+  private async probeConnectionSpeed(): Promise<boolean> {
+    // Vérifier via l'API Network Information si disponible
+    const conn = (navigator as any).connection;
+    if (conn?.effectiveType === 'slow-2g' || conn?.effectiveType === '2g') {
+      return false; // connexion lente
+    }
+
+    // Sonde temporelle : télécharger un pixel pour mesurer le débit
+    try {
+      const start = Date.now();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      await fetch('/favicon.ico', {
+        method: 'HEAD',
+        cache: 'no-cache',
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      const elapsed = Date.now() - start;
+      // > 3 secondes pour un HEAD sur favicon = connexion très lente
+      return elapsed < 3000;
+    } catch {
+      return false;
+    }
+  }
+
+  private async handleOnline(): Promise<void> {
     const now = new Date();
     this.lastOnlineAt = now.toISOString();
     this.reconnectionHistory.push(now.getTime());
@@ -35,17 +79,27 @@ class NetworkMonitor {
     const twoMinutesAgo = now.getTime() - this.unstableTimeWindow;
     this.reconnectionHistory = this.reconnectionHistory.filter(t => t > twoMinutesAgo);
 
-    // Détecter l'instabilité
+    // Détecter l'instabilité par fréquence de reconnexion
     if (this.reconnectionHistory.length >= this.unstableThreshold) {
       this.status = 'unstable';
-      // Mettre en pause les synchronisations pendant 5 minutes
       this.pauseSyncUntil = new Date(now.getTime() + 300000).toISOString();
       console.warn('⚠️ Réseau instable détecté - Synchronisations en pause pour 5 minutes');
-    } else {
-      this.status = 'online';
-      this.pauseSyncUntil = null;
+      this.notifyListeners();
+      return;
     }
 
+    // Vérifier le débit réel avant de déclarer la connexion stable
+    const isFast = await this.probeConnectionSpeed();
+    if (!isFast) {
+      this.status = 'unstable';
+      this.pauseSyncUntil = new Date(now.getTime() + 300000).toISOString();
+      console.warn('⚠️ Débit insuffisant - Synchronisations en pause pour 5 minutes');
+      this.notifyListeners();
+      return;
+    }
+
+    this.status = 'online';
+    this.pauseSyncUntil = null;
     this.notifyListeners();
   }
 
@@ -68,7 +122,7 @@ class NetworkMonitor {
       this.pauseSyncUntil = null;
       this.status = 'online';
     }
-    return true;
+    return this.status === 'online';
   }
 
   getState(): NetworkState {

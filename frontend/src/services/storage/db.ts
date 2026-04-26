@@ -1,6 +1,6 @@
 // Configuration IndexedDB
 const DB_NAME = "guardtrack_offline";
-const DB_VERSION = 3; // Incrémenter la version pour forcer la mise à jour
+const DB_VERSION = 4;
 
 export interface StoredAssignment {
   id: number;
@@ -139,6 +139,11 @@ class OfflineDB {
         // Store pour les métadonnées
         if (!db.objectStoreNames.contains("meta")) {
           db.createObjectStore("meta", { keyPath: "key" });
+        }
+
+        // Store pour les identifiants offline (connexion sans réseau)
+        if (!db.objectStoreNames.contains("credentials")) {
+          db.createObjectStore("credentials", { keyPath: "email" });
         }
       };
     });
@@ -488,9 +493,32 @@ class OfflineDB {
     });
   }
 
+  // ========== IDENTIFIANTS OFFLINE ==========
+  async saveOfflineCredentials(email: string, pinHash: string, user: object): Promise<void> {
+    const db = await this.open();
+    const tx = db.transaction("credentials", "readwrite");
+    const store = tx.objectStore("credentials");
+    return new Promise((resolve, reject) => {
+      const request = store.put({ email, pinHash, user, savedAt: new Date().toISOString() });
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
+  async getOfflineCredentials(email: string): Promise<{ email: string; pinHash: string; user: object; savedAt: string } | null> {
+    const db = await this.open();
+    const tx = db.transaction("credentials", "readonly");
+    const store = tx.objectStore("credentials");
+    return new Promise((resolve, reject) => {
+      const request = store.get(email);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result || null);
+    });
+  }
+
   async clearAll(): Promise<void> {
     const db = await this.open();
-    const stores = ["assignments", "presences", "incidents", "rounds", "syncQueue", "meta"];
+    const stores = ["assignments", "presences", "incidents", "rounds", "syncQueue", "meta", "credentials"];
 
     for (const storeName of stores) {
       if (db.objectStoreNames.contains(storeName)) {
@@ -507,3 +535,11 @@ class OfflineDB {
 }
 
 export const offlineDB = new OfflineDB();
+
+export async function hashPin(pin: string): Promise<string> {
+  const encoded = new TextEncoder().encode(pin);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
