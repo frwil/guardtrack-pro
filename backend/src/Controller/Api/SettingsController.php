@@ -375,26 +375,27 @@ class SettingsController extends AbstractController
             return [false, 'Clé API introuvable (base de données et variable ZAI_API_KEY vides)'];
         }
 
-        [$httpCode, $curlError, $response] = $this->curlTest(
+        [$httpCode, $curlError] = $this->curlTest(
             'https://api.z.ai/api/paas/v4/chat/completions',
             ['Authorization: Bearer ' . $apiKey, 'Content-Type: application/json'],
-            json_encode(['model' => 'glm-4-flash', 'messages' => [['role' => 'user', 'content' => 'ping']], 'max_tokens' => 1])
+            json_encode([
+                'model'    => 'glm-4-flash',
+                'messages' => [['role' => 'user', 'content' => 'test']],
+            ])
         );
 
         if ($curlError) {
             return [false, 'Erreur réseau : ' . $curlError];
         }
-        if ($httpCode === 200) {
+        // 200 = succès, 400 = format accepté mais paramètre invalide (clé OK), 429 = quota
+        if (in_array($httpCode, [200, 400, 429], true)) {
             return [true, 'Connexion Z.AI réussie'];
         }
         if ($httpCode === 401 || $httpCode === 403) {
             return [false, "Clé API refusée par Z.AI (HTTP $httpCode)"];
         }
-        if ($httpCode === 429) {
-            return [true, 'Z.AI accessible — quota temporairement dépassé (HTTP 429)'];
-        }
 
-        return [false, "Réponse inattendue de Z.AI (HTTP $httpCode)"];
+        return [false, "Z.AI inaccessible (HTTP $httpCode)"];
     }
 
     /** @return array{bool, string} */
