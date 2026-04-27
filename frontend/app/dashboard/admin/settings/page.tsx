@@ -61,6 +61,14 @@ export default function AdminSettingsPage() {
     setLogoPreview(URL.createObjectURL(file));
   };
 
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
   const handleLogoUpload = async () => {
     const file = logoInputRef.current?.files?.[0];
     if (!file) return;
@@ -69,8 +77,11 @@ export default function AdminSettingsPage() {
       const optimized = await optimizeImage(file);
       const result = await settingsService.uploadLogo(optimized);
       if (result?.url) {
+        // Convertir en base64 ici — on a déjà le blob, pas de CORS
+        const b64 = await fileToBase64(optimized);
+        localStorage.setItem('guardtrack_logo_b64', b64);
+        setLogoPreview(b64);
         setSettings(s => s ? { ...s, company: { ...s.company, logo: result.url } } : s);
-        setLogoPreview(null);
         if (logoInputRef.current) logoInputRef.current.value = '';
         await refreshSettings();
         alert('✅ Logo optimisé et mis à jour');
