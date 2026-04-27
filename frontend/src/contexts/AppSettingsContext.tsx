@@ -45,21 +45,85 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const [currency, setCurrency] = useState('XOF');
 
+  const cacheLogoAsBase64 = useCallback(async (relativePath: string): Promise<string | null> => {
+    try {
+      const baseUrl = apiConfig.getApiUrl().replace(/\/api\/?$/, '');
+      const fullUrl = `${baseUrl}${relativePath}`;
+      const res = await fetch(fullUrl);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  }, []);
+
   const fetchSettings = useCallback(async () => {
+    // Offline: restore from cache
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      const cachedName = localStorage.getItem('guardtrack_company_name');
+      const cachedLogo = localStorage.getItem('guardtrack_logo_b64');
+      const cachedCurrency = localStorage.getItem('guardtrack_currency');
+      if (cachedName) setCompanyName(cachedName);
+      if (cachedLogo) setCompanyLogo(cachedLogo);
+      if (cachedCurrency) setCurrency(cachedCurrency);
+      return;
+    }
+
     try {
       const apiUrl = apiConfig.getApiUrl();
       const res = await fetch(`${apiUrl}/settings/public`, {
         headers: { Accept: 'application/json', 'ngrok-skip-browser-warning': 'true' },
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        // Fall back to cached values on error
+        const cachedName = localStorage.getItem('guardtrack_company_name');
+        const cachedLogo = localStorage.getItem('guardtrack_logo_b64');
+        const cachedCurrency = localStorage.getItem('guardtrack_currency');
+        if (cachedName) setCompanyName(cachedName);
+        if (cachedLogo) setCompanyLogo(cachedLogo);
+        if (cachedCurrency) setCurrency(cachedCurrency);
+        return;
+      }
       const data = await res.json();
-      if (data.company_name) setCompanyName(data.company_name);
-      if (data.company_currency) setCurrency(data.company_currency);
-      setCompanyLogo(data.company_logo || null);
+
+      if (data.company_name) {
+        setCompanyName(data.company_name);
+        localStorage.setItem('guardtrack_company_name', data.company_name);
+      }
+      if (data.company_currency) {
+        setCurrency(data.company_currency);
+        localStorage.setItem('guardtrack_currency', data.company_currency);
+      }
+
+      if (data.company_logo) {
+        const b64 = await cacheLogoAsBase64(data.company_logo);
+        if (b64) {
+          localStorage.setItem('guardtrack_logo_b64', b64);
+          setCompanyLogo(b64);
+        } else {
+          // Fallback to cached
+          const cached = localStorage.getItem('guardtrack_logo_b64');
+          setCompanyLogo(cached || null);
+        }
+      } else {
+        setCompanyLogo(null);
+      }
     } catch {
-      // silencieux — valeurs par défaut conservées
+      // Network error — use cache
+      const cachedName = localStorage.getItem('guardtrack_company_name');
+      const cachedLogo = localStorage.getItem('guardtrack_logo_b64');
+      const cachedCurrency = localStorage.getItem('guardtrack_currency');
+      if (cachedName) setCompanyName(cachedName);
+      if (cachedLogo) setCompanyLogo(cachedLogo);
+      if (cachedCurrency) setCurrency(cachedCurrency);
     }
-  }, []);
+  }, [cacheLogoAsBase64]);
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
