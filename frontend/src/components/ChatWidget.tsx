@@ -12,7 +12,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faComment, faTimes, faPaperPlane, faSpinner, faCircle,
-  faUsers, faUser, faChevronLeft, faPlus, faSearch, faLanguage,
+  faUsers, faUser, faChevronLeft, faPlus, faSearch, faLanguage, faGripVertical,
 } from '@fortawesome/free-solid-svg-icons';
 import type { User } from '../types/index';
 import type { ChatMessage } from '../services/api/chat';
@@ -46,6 +46,41 @@ export function ChatWidget() {
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Position déplaçable
+  const [pos, setPos] = useState({ bottom: 16, right: 16 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef<{ x: number; y: number; b: number; r: number } | null>(null);
+
+  const onDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    const cx = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const cy = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    dragStart.current = { x: cx, y: cy, b: pos.bottom, r: pos.right };
+    setIsDragging(true);
+
+    const move = (ev: MouseEvent | TouchEvent) => {
+      if (!dragStart.current) return;
+      const mx = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
+      const my = 'touches' in ev ? (ev as TouchEvent).touches[0].clientY : (ev as MouseEvent).clientY;
+      setPos({
+        bottom: Math.max(8, Math.min(window.innerHeight - 72, dragStart.current.b - (my - dragStart.current.y))),
+        right:  Math.max(8, Math.min(window.innerWidth  - 64, dragStart.current.r - (mx - dragStart.current.x))),
+      });
+    };
+    const up = () => {
+      dragStart.current = null;
+      setIsDragging(false);
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', up);
+  };
 
   // Traduction sortante
   const [showLangPicker, setShowLangPicker] = useState(false);
@@ -256,11 +291,14 @@ export function ChatWidget() {
   };
 
   return (
-    <>
+    <div
+      style={{ position: 'fixed', bottom: pos.bottom, right: pos.right, zIndex: 40 }}
+      className="flex flex-col-reverse items-end gap-3"
+    >
       {/* Bouton d'ouverture */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-4 right-4 z-40 bg-indigo-600 text-white p-4 rounded-full shadow-lg hover:bg-indigo-700 transition-colors"
+        onClick={() => !isDragging && setIsOpen(!isOpen)}
+        className="relative bg-indigo-600 text-white p-4 rounded-full shadow-lg hover:bg-indigo-700 transition-colors"
       >
         <FontAwesomeIcon icon={faComment} className="text-xl" />
         {totalUnread > 0 && (
@@ -275,17 +313,23 @@ export function ChatWidget() {
 
       {/* Fenêtre de chat */}
       {isOpen && (
-        <div className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col
-          left-2 right-2 bottom-20 max-h-[calc(100vh-6rem)]
-          sm:left-auto sm:right-4 sm:w-96 sm:h-[600px] sm:max-h-[calc(100vh-6rem)]">
+        <div className="bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col
+          w-[calc(100vw-1rem)] max-h-[calc(100vh-6rem)]
+          sm:w-96 sm:h-[600px] sm:max-h-[calc(100vh-6rem)]">
 
-          {/* En-tête */}
-          <div className="p-4 border-b flex items-center justify-between bg-indigo-600 text-white rounded-t-lg">
-            <div className="flex items-center">
+          {/* En-tête — poignée de déplacement */}
+          <div
+            className={`p-4 border-b flex items-center justify-between bg-indigo-600 text-white rounded-t-lg select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+            onMouseDown={onDragStart}
+            onTouchStart={onDragStart}
+          >
+            <div className="flex items-center gap-2">
+              <FontAwesomeIcon icon={faGripVertical} className="opacity-60 text-sm" />
               {(currentConversation || showNewConv) && (
                 <button
+                  onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => { setCurrentConversation(null); setShowNewConv(false); }}
-                  className="mr-2 hover:text-gray-200"
+                  className="hover:text-gray-200"
                 >
                   <FontAwesomeIcon icon={faChevronLeft} />
                 </button>
@@ -298,7 +342,7 @@ export function ChatWidget() {
                     : t('chat.title')}
               </h3>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3" onMouseDown={(e) => e.stopPropagation()}>
               <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
               {!currentConversation && !showNewConv && (
                 <button onClick={handleOpenNewConv} className="hover:text-gray-200" title={t('chat.newConversation')}>
@@ -572,6 +616,6 @@ export function ChatWidget() {
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }
