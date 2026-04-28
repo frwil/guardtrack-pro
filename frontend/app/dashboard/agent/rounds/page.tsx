@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../../../src/stores/authStore';
 import { roundsService, Round } from '../../../../src/services/api/rounds';
+import { syncManager } from '../../../../src/services/sync/manager';
 import { useTranslation } from '../../../../src/contexts/I18nContext';
 import Link from 'next/link';
 
@@ -62,6 +63,14 @@ export default function AgentRoundsPage() {
     : pastRounds;
 
   const handleStartRound = async (roundId: number) => {
+    if (!navigator.onLine) {
+      await syncManager.startRound(roundId);
+      // Mise à jour optimiste de l'UI
+      setTodayRounds((prev: any[]) =>
+        prev.map((r) => r.id === roundId ? { ...r, status: 'IN_PROGRESS', _offline: true } : r)
+      );
+      return;
+    }
     if (await roundsService.start(roundId)) loadRounds();
   };
 

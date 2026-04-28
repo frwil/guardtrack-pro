@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '../../../../../src/stores/authStore';
 import { incidentsService } from '../../../../../src/services/api/incidents';
 import { assignmentsService } from '../../../../../src/services/api/assignments';
+import { syncManager } from '../../../../../src/services/sync/manager';
 
 export default function CreateIncidentPage() {
   const router = useRouter();
@@ -53,12 +54,27 @@ export default function CreateIncidentPage() {
     if (!validateForm()) return;
 
     setIsLoading(true);
+
+    // Hors ligne → sauvegarde locale
+    if (!navigator.onLine) {
+      try {
+        await syncManager.createIncident({
+          ...formData,
+          siteId: parseInt(formData.siteId),
+        });
+        router.push('/dashboard/agent/incidents?queued=1');
+      } catch {
+        setErrors({ submit: 'Erreur de sauvegarde locale' });
+        setIsLoading(false);
+      }
+      return;
+    }
+
     try {
       const result = await incidentsService.create({
         ...formData,
         siteId: parseInt(formData.siteId),
       });
-      
       if (result) {
         router.push('/dashboard/agent/incidents');
       }

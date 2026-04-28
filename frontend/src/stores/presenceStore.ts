@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { presencesService, Presence } from '../services/api/presences';
+import { syncManager } from '../services/sync/manager';
+import { offlineDB } from '../services/storage/db';
 
 interface PresenceState {
   todayPresences: Presence[];
@@ -44,6 +46,28 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
 
   checkIn: async (siteId, latitude, longitude, photo) => {
     set({ isLoading: true, error: null });
+
+    // Hors ligne → sauvegarde locale + file d'attente
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      try {
+        await syncManager.createPresence({ siteId, latitude, longitude, photo });
+        // Présence optimiste dans le state pour mise à jour immédiate de l'UI
+        const optimistic: Presence = {
+          id: Date.now(),
+          siteId,
+          checkIn: new Date().toISOString(),
+          checkOut: null,
+          status: 'PENDING',
+          _offline: true,
+        } as any;
+        set((s) => ({ todayPresences: [...s.todayPresences, optimistic], isLoading: false }));
+        return true;
+      } catch {
+        set({ error: 'Erreur de sauvegarde locale', isLoading: false });
+        return false;
+      }
+    }
+
     try {
       const result = await presencesService.checkIn({ siteId, latitude, longitude, photo });
       if (result) {
@@ -59,6 +83,32 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
 
   checkOut: async (presenceId) => {
     set({ isLoading: true, error: null });
+
+    // Hors ligne → mise en file d'attente du check-out
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      try {
+        await offlineDB.addToSyncQueue({
+          type: 'CHECK_OUT',
+          entity: 'presence',
+          data: { presenceId },
+          clientTime: new Date().toISOString(),
+          clientTimestamp: Date.now(),
+          createdAt: new Date().toISOString(),
+        });
+        // Mise à jour optimiste dans le state
+        set((s) => ({
+          isLoading: false,
+          todayPresences: s.todayPresences.map((p) =>
+            p.id === presenceId ? { ...p, checkOut: new Date().toISOString() } : p
+          ),
+        }));
+        return true;
+      } catch {
+        set({ error: 'Erreur de sauvegarde locale', isLoading: false });
+        return false;
+      }
+    }
+
     try {
       const result = await presencesService.checkOut(presenceId);
       if (result) {

@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "../../src/stores/authStore";
 import { networkMonitor } from "../../src/services/network/monitor";
 import { prefetchService, PrefetchStatus } from "../../src/services/prefetch";
+import { PendingSyncBadge } from "../../src/components/PendingSyncBadge";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { ChatWidget } from "../../src/components/ChatWidget";
 import { LanguageSwitcher } from "../../src/components/LanguageSwitcher";
@@ -175,6 +176,7 @@ export default function DashboardLayout({
         <div className="lg:hidden mb-4 flex items-center justify-between bg-white p-4 rounded-lg shadow">
           <h1 className="text-xl font-bold text-indigo-600">🛡️ GuardTrack</h1>
           <div className="flex items-center space-x-3">
+            <PendingSyncBadge />
             <LanguageSwitcher />
             <NotificationBell />
             <button
@@ -200,6 +202,7 @@ export default function DashboardLayout({
           {syncStatus === 'done' && (
             <span className="text-xs text-green-500">✓ À jour</span>
           )}
+          <PendingSyncBadge />
           <LanguageSwitcher variant="full" />
           <NotificationBell />
         </div>
