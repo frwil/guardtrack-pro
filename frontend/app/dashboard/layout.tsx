@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "../../src/stores/authStore";
 import { networkMonitor } from "../../src/services/network/monitor";
+import { prefetchService, PrefetchStatus } from "../../src/services/prefetch";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { ChatWidget } from "../../src/components/ChatWidget";
 import { LanguageSwitcher } from "../../src/components/LanguageSwitcher";
@@ -26,6 +27,9 @@ export default function DashboardLayout({
   const [networkStatus, setNetworkStatus] = useState(
     networkMonitor.getStatus(),
   );
+  const [syncStatus, setSyncStatus] = useState<PrefetchStatus>('idle');
+  const prevNetworkRef = useRef(networkMonitor.getStatus());
+  const prefetchedRef = useRef(false);
 
   useEffect(() => {
     if (_hasHydrated && !isAuthenticated) {
@@ -33,10 +37,30 @@ export default function DashboardLayout({
     }
   }, [isAuthenticated, _hasHydrated, router]);
 
+  // Prefetch initial dès que l'utilisateur est authentifié
   useEffect(() => {
-    const unsubscribe = networkMonitor.subscribe(setNetworkStatus);
-    return unsubscribe;
+    if (_hasHydrated && user && !prefetchedRef.current) {
+      prefetchedRef.current = true;
+      prefetchService.prefetchForRole(user.role as any);
+    }
+  }, [_hasHydrated, user]);
+
+  // Abonnement au statut de sync pour l'indicateur
+  useEffect(() => {
+    return prefetchService.subscribe(setSyncStatus);
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = networkMonitor.subscribe((status) => {
+      // Refresh complet quand la connexion revient
+      if (prevNetworkRef.current !== 'online' && status === 'online' && user) {
+        prefetchService.prefetchForRole(user.role as any);
+      }
+      prevNetworkRef.current = status;
+      setNetworkStatus(status);
+    });
+    return unsubscribe;
+  }, [user]);
 
   if (!user) {
     return (
@@ -167,6 +191,15 @@ export default function DashboardLayout({
 
         {/* Header desktop avec notifications */}
         <div className="hidden lg:flex items-center justify-end mb-4 space-x-3">
+          {syncStatus === 'syncing' && (
+            <span className="text-xs text-gray-400 flex items-center gap-1 animate-pulse">
+              <span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin inline-block" />
+              Synchronisation…
+            </span>
+          )}
+          {syncStatus === 'done' && (
+            <span className="text-xs text-green-500">✓ À jour</span>
+          )}
           <LanguageSwitcher variant="full" />
           <NotificationBell />
         </div>
