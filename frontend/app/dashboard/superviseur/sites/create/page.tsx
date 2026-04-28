@@ -153,6 +153,11 @@ export default function CreateEditSitePage() {
 
     if (!validateForm()) return;
 
+    if (!navigator.onLine) {
+      alert('📵 Vous êtes hors ligne. Reconnectez-vous pour enregistrer ce site.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       if (isEdit && siteId) {

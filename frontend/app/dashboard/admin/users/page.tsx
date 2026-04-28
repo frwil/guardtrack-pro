@@ -66,18 +66,16 @@ export default function AdminUsersPage() {
   };
 
   const handleToggleActive = async (id: number) => {
+    if (!navigator.onLine) { alert('📵 Action impossible hors ligne.'); return; }
     const result = await usersService.toggleActive(id);
-    if (result) {
-      loadUsers();
-    }
+    if (result) loadUsers();
   };
 
   const handleDelete = async (id: number, name: string) => {
+    if (!navigator.onLine) { alert('📵 Action impossible hors ligne.'); return; }
     if (confirm(`Supprimer l'utilisateur ${name} ?`)) {
       const result = await usersService.delete(id);
-      if (result) {
-        loadUsers();
-      }
+      if (result) loadUsers();
     }
   };
 

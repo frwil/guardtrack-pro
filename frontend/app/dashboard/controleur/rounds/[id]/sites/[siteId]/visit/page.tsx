@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { roundsService } from "../../../../../../../../src/services/api/rounds";
+import { syncManager } from "../../../../../../../../src/services/sync/manager";
 import {
   imageAnalysisEnhancedService,
   EnhancedAnalysisResult,
@@ -628,7 +629,13 @@ export default function ControllerVisitPage() {
       };
 
       addLog('📤 Envoi des données de visite...', 'info');
-      console.log("Données envoyées:", visitData);
+
+      if (!navigator.onLine) {
+        await syncManager.controllerVisitSite(Number(roundId), Number(siteId), visitData);
+        addLog('💾 Visite sauvegardée localement (hors ligne)', 'info');
+        router.push(`/dashboard/controleur/rounds/${roundId}?queued=1`);
+        return;
+      }
 
       await roundsService.controllerVisitSite(roundId, siteId, visitData);
       addLog('✅ Visite enregistrée avec succès', 'success');

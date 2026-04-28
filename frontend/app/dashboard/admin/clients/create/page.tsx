@@ -98,6 +98,11 @@ export default function CreateEditClientPage() {
 
     if (!validateForm()) return;
 
+    if (!navigator.onLine) {
+      setErrors({ submit: 'Vous êtes hors ligne. Reconnectez-vous pour enregistrer ce client.' });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const payload = {

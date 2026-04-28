@@ -262,10 +262,15 @@ export default function EditAssignmentPage() {
       }
     }
 
+    if (!navigator.onLine) {
+      alert('📵 Vous êtes hors ligne. Reconnectez-vous pour modifier cette affectation.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload: any = {};
-      
+
       // Ne mettre à jour que les champs qui ont changé
       if (formData.agentId !== originalAssignment?.agent.id.toString()) {
         payload.agentId = parseInt(formData.agentId);
@@ -314,6 +319,7 @@ export default function EditAssignmentPage() {
   };
 
   const handleCancelAssignment = async () => {
+    if (!navigator.onLine) { alert('📵 Action impossible hors ligne.'); return; }
     setIsCancelling(true);
     try {
       await assignmentsService.cancel(assignmentId);

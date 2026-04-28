@@ -123,29 +123,37 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
   },
 
   validatePresence: async (presenceId) => {
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      try {
+        await syncManager.queue('presence', 'VALIDATE', { presenceId });
+        set((s) => ({
+          pendingPresences: s.pendingPresences.filter((p) => p.id !== presenceId),
+        }));
+        return true;
+      } catch { return false; }
+    }
     try {
       const result = await presencesService.validate(presenceId);
-      if (result) {
-        await get().fetchPendingPresences();
-        return true;
-      }
+      if (result) { await get().fetchPendingPresences(); return true; }
       return false;
-    } catch (error) {
-      return false;
-    }
+    } catch { return false; }
   },
 
   rejectPresence: async (presenceId, reason) => {
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      try {
+        await syncManager.queue('presence', 'REJECT', { presenceId, reason });
+        set((s) => ({
+          pendingPresences: s.pendingPresences.filter((p) => p.id !== presenceId),
+        }));
+        return true;
+      } catch { return false; }
+    }
     try {
       const result = await presencesService.reject(presenceId, reason);
-      if (result) {
-        await get().fetchPendingPresences();
-        return true;
-      }
+      if (result) { await get().fetchPendingPresences(); return true; }
       return false;
-    } catch (error) {
-      return false;
-    }
+    } catch { return false; }
   },
 
   clearError: () => set({ error: null }),

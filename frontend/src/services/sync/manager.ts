@@ -599,6 +599,18 @@ class SyncManager {
           });
           return !!result;
         }
+        if (op.type === "CHECK_OUT") {
+          const result = await presencesService.checkOut(op.data.presenceId);
+          return !!result;
+        }
+        if (op.type === "VALIDATE") {
+          const result = await presencesService.validate(op.data.presenceId);
+          return !!result;
+        }
+        if (op.type === "REJECT") {
+          const result = await presencesService.reject(op.data.presenceId, op.data.reason);
+          return !!result;
+        }
         break;
 
       case "round":
@@ -713,6 +725,23 @@ class SyncManager {
       ).length,
       lastSync,
     };
+  }
+
+  /** Helper : met une opération quelconque en file d'attente */
+  async queue(entity: string, type: string, data: Record<string, unknown>): Promise<void> {
+    await offlineDB.addToSyncQueue({
+      type,
+      entity,
+      data,
+      clientTime: new Date().toISOString(),
+      clientTimestamp: Date.now(),
+      serverTimeEstimated: serverTime.isSynced() ? serverTime.getServerISOString() : undefined,
+      timeOffset: serverTime.isSynced() ? serverTime.getOffset() : undefined,
+      createdAt: new Date().toISOString(),
+    });
+    if (networkMonitor.isSyncAllowed()) {
+      this.processSyncQueue().catch(console.error);
+    }
   }
 }
 

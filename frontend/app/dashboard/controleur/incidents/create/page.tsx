@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '../../../../../src/stores/authStore';
 import { incidentsService } from '../../../../../src/services/api/incidents';
+import { syncManager } from '../../../../../src/services/sync/manager';
 import { sitesService } from '../../../../../src/services/api/sites';
 import { imageOptimizer, OptimizationResult } from '../../../../../src/services/image/optimizer';
 import { CameraCapture } from '../../../../../src/components/CameraCapture';
@@ -119,18 +120,23 @@ export default function ControleurCreateIncidentPage() {
     if (!validateForm()) return;
 
     setIsLoading(true);
-    try {
-      const finalPhotos = photos.map(p => p.optimized.dataUrl);
-      
-      const result = await incidentsService.create({
-        ...formData,
-        siteId: parseInt(formData.siteId),
-        photos: finalPhotos,
-      });
-      
-      if (result) {
-        router.push('/dashboard/controleur/incidents');
+    const finalPhotos = photos.map(p => p.optimized.dataUrl);
+    const payload = { ...formData, siteId: parseInt(formData.siteId), photos: finalPhotos };
+
+    if (!navigator.onLine) {
+      try {
+        await syncManager.createIncident(payload);
+        router.push('/dashboard/controleur/incidents?queued=1');
+      } catch {
+        setErrors({ submit: 'Erreur de sauvegarde locale' });
+        setIsLoading(false);
       }
+      return;
+    }
+
+    try {
+      const result = await incidentsService.create(payload);
+      if (result) router.push('/dashboard/controleur/incidents');
     } catch (error) {
       console.error('Erreur de création:', error);
       setErrors({ submit: 'Erreur lors de la création de l\'incident' });

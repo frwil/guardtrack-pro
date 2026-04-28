@@ -188,6 +188,11 @@ export default function CreateAssignmentPage() {
       }
     }
 
+    if (!navigator.onLine) {
+      setErrors({ submit: 'Vous êtes hors ligne. Reconnectez-vous pour créer cette affectation.' });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // Construire le payload avec undefined au lieu de null
