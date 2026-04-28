@@ -8,6 +8,7 @@ import {
   ReportSummary,
 } from "../../../../src/services/api/reports";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { useTranslation } from '../../../../src/contexts/I18nContext';
 import {
   faCalendar,
   faDownload,
@@ -31,6 +32,7 @@ import {
 type GroupBy = "agent" | "site";
 
 export default function ControleurReportsPage() {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [period, setPeriod] = useState<ReportPeriod>({
@@ -162,7 +164,7 @@ export default function ControleurReportsPage() {
       document.body.removeChild(a);
     } catch (error) {
       console.error("Erreur de téléchargement:", error);
-      alert("Erreur lors du téléchargement du rapport");
+      alert(t('controller.reports.downloadError'));
     } finally {
       setIsDownloading(false);
     }
@@ -315,7 +317,7 @@ export default function ControleurReportsPage() {
               icon={faChartBar}
               className="mr-3 text-indigo-600"
             />
-            Rapports
+            {t('controller.reports.title')}
           </h1>
           <div className="flex space-x-2">
             <button
@@ -324,7 +326,7 @@ export default function ControleurReportsPage() {
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
             >
               <FontAwesomeIcon icon={faFileExcel} className="mr-2" />
-              Excel
+              {t('controller.reports.downloadExcel')}
             </button>
             <button
               onClick={() => handleDownload("pdf")}
@@ -332,7 +334,7 @@ export default function ControleurReportsPage() {
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center"
             >
               <FontAwesomeIcon icon={faFilePdf} className="mr-2" />
-              PDF
+              {t('controller.reports.downloadPdf')}
             </button>
           </div>
         </div>
@@ -350,7 +352,7 @@ export default function ControleurReportsPage() {
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Jour
+              {t('controller.reports.day')}
             </button>
             <button
               onClick={() => handlePeriodChange("week")}
@@ -360,7 +362,7 @@ export default function ControleurReportsPage() {
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Semaine
+              {t('controller.reports.week')}
             </button>
             <button
               onClick={() => handlePeriodChange("month")}
@@ -370,7 +372,7 @@ export default function ControleurReportsPage() {
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Mois
+              {t('controller.reports.month')}
             </button>
           </div>
 
@@ -404,7 +406,7 @@ export default function ControleurReportsPage() {
               }`}
             >
               <FontAwesomeIcon icon={faChartBar} className="mr-1" />
-              Résumé
+              {t('controller.reports.summary')}
             </button>
             <button
               onClick={() => setViewMode("table")}
@@ -415,7 +417,7 @@ export default function ControleurReportsPage() {
               }`}
             >
               <FontAwesomeIcon icon={faTable} className="mr-1" />
-              Tableau croisé
+              {t('controller.reports.crossTable')}
             </button>
           </div>
 
@@ -428,7 +430,7 @@ export default function ControleurReportsPage() {
               icon={faRotate}
               className={`mr-2 ${isLoading ? "animate-spin" : ""}`}
             />
-            Actualiser
+            {t('controller.reports.refresh')}
           </button>
         </div>
 
@@ -436,7 +438,7 @@ export default function ControleurReportsPage() {
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-600 mb-1">
-                Date de début
+                {t('controller.reports.startDate')}
               </label>
               <input
                 type="date"
@@ -449,7 +451,7 @@ export default function ControleurReportsPage() {
             </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">
-                Date de fin
+                {t('controller.reports.endDate')}
               </label>
               <input
                 type="date"
@@ -471,7 +473,7 @@ export default function ControleurReportsPage() {
             spin
             className="text-3xl text-indigo-600 mb-3"
           />
-          <p className="text-gray-500">Génération du rapport...</p>
+          <p className="text-gray-500">{t('controller.reports.generating')}</p>
         </div>
       ) : (
         summary && (
@@ -482,31 +484,31 @@ export default function ControleurReportsPage() {
                 {/* KPIs */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="bg-white rounded-lg shadow p-4">
-                    <p className="text-sm text-gray-500">Sites</p>
+                    <p className="text-sm text-gray-500">{t('controller.reports.kpiSites')}</p>
                     <p className="text-2xl font-bold text-indigo-600">
                       {summary.totalSites}
                     </p>
                   </div>
                   <div className="bg-white rounded-lg shadow p-4">
-                    <p className="text-sm text-gray-500">Agents</p>
+                    <p className="text-sm text-gray-500">{t('controller.reports.kpiAgents')}</p>
                     <p className="text-2xl font-bold text-blue-600">
                       {summary.totalAgents}
                     </p>
                   </div>
                   <div className="bg-white rounded-lg shadow p-4">
-                    <p className="text-sm text-gray-500">Présences</p>
+                    <p className="text-sm text-gray-500">{t('controller.reports.kpiPresences')}</p>
                     <p className="text-2xl font-bold text-green-600">
                       {summary.totalPresences}
                     </p>
                   </div>
                   <div className="bg-white rounded-lg shadow p-4">
-                    <p className="text-sm text-gray-500">Absences</p>
+                    <p className="text-sm text-gray-500">{t('controller.reports.kpiAbsences')}</p>
                     <p className="text-2xl font-bold text-red-600">
                       {summary.totalAbsences}
                     </p>
                   </div>
                   <div className="bg-white rounded-lg shadow p-4">
-                    <p className="text-sm text-gray-500">Taux de présence</p>
+                    <p className="text-sm text-gray-500">{t('controller.reports.kpiPresenceRate')}</p>
                     <p className="text-2xl font-bold text-purple-600">
                       {formatRate(summary.presenceRate)}
                     </p>
@@ -516,18 +518,18 @@ export default function ControleurReportsPage() {
                 {/* Résumé par site */}
                 <div className="bg-white rounded-lg shadow">
                   <div className="p-4 border-b">
-                    <h2 className="font-semibold">Résumé par site</h2>
+                    <h2 className="font-semibold">{t('controller.reports.summaryBySite')}</h2>
                   </div>
                   <div className="p-4">
                     <table className="w-full">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2">Site</th>
-                          <th className="text-center py-2">Agents</th>
-                          <th className="text-center py-2">✅ Présences</th>
-                          <th className="text-center py-2">❌ Absences</th>
-                          <th className="text-center py-2" title="Jours sans visite enregistrée dans la période">⬜ Non évalué</th>
-                          <th className="text-center py-2">Taux</th>
+                          <th className="text-left py-2">{t('controller.reports.site')}</th>
+                          <th className="text-center py-2">{t('controller.reports.kpiAgents')}</th>
+                          <th className="text-center py-2">✅ {t('controller.reports.presence')}</th>
+                          <th className="text-center py-2">❌ {t('controller.reports.absence')}</th>
+                          <th className="text-center py-2" title="Jours sans visite enregistrée dans la période">⬜ {t('controller.reports.notEvaluated')}</th>
+                          <th className="text-center py-2">{t('controller.reports.rate')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -591,10 +593,10 @@ export default function ControleurReportsPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <h2 className="font-semibold">
-                            Tableau croisé - Présences par jour
+                            {t('controller.reports.tableTitle')}
                           </h2>
                           <p className="text-sm text-gray-500 mt-1">
-                            ✅ = Présent, ❌ = Absent, ❓ = Non déclaré
+                            {t('controller.reports.tableLegend')}
                           </p>
                         </div>
                         {/* ✅ Boutons de regroupement */}
@@ -608,7 +610,7 @@ export default function ControleurReportsPage() {
                             }`}
                           >
                             <FontAwesomeIcon icon={faUsers} className="mr-1" />
-                            Par agent
+                            {t('controller.reports.groupByAgent')}
                           </button>
                           <button
                             onClick={() => setGroupBy("site")}
@@ -622,7 +624,7 @@ export default function ControleurReportsPage() {
                               icon={faBuilding}
                               className="mr-1"
                             />
-                            Par site
+                            {t('controller.reports.groupBySite')}
                           </button>
                         </div>
                       </div>
@@ -632,7 +634,7 @@ export default function ControleurReportsPage() {
                         <thead>
                           <tr className="border-b bg-gray-50">
                             <th className="text-left py-2 sticky left-0 bg-gray-50 px-2">
-                              {type === "agent" ? "Agent" : "Site"}
+                              {type === "agent" ? t('controller.reports.agent') : t('controller.reports.site')}
                             </th>
                             {dates.map((date) => (
                               <th key={date} className="text-center py-2 px-2">
@@ -643,10 +645,10 @@ export default function ControleurReportsPage() {
                               </th>
                             ))}
                             <th className="text-center py-2 bg-indigo-50">
-                              Total
+                              {t('controller.reports.total')}
                             </th>
                             <th className="text-center py-2 bg-purple-50">
-                              Taux
+                              {t('controller.reports.rate')}
                             </th>
                           </tr>
                         </thead>
@@ -732,7 +734,7 @@ export default function ControleurReportsPage() {
                                 {/* Ligne sous-total du groupe */}
                                 <tr className="bg-indigo-50 border-b-2 border-indigo-200">
                                   <td className="py-2 sticky left-0 bg-indigo-50 pl-4 text-xs font-semibold text-indigo-700">
-                                    Sous-total — {groupName}
+                                    {t('controller.reports.subtotal')} — {groupName}
                                   </td>
                                   {dates.map((date: string) => {
                                     const presentCount = group.rows.filter((r: any) => r.days[date] === 1).length;
@@ -768,7 +770,7 @@ export default function ControleurReportsPage() {
                                 icon={faLayerGroup}
                                 className="mr-2 text-indigo-600"
                               />
-                              TOTAL GÉNÉRAL
+                              {t('controller.reports.grandTotal')}
                             </td>
                             {dates.map((date: string) => {
                               const allRows = crossTable.matrix;
@@ -822,7 +824,7 @@ export default function ControleurReportsPage() {
 
             {/* Généré le */}
             <p className="text-xs text-gray-400 text-right">
-              Rapport généré le{" "}
+              {t('controller.reports.generatedOn')}{" "}
               {new Date(summary.generatedAt).toLocaleString("fr-FR")}
             </p>
           </>

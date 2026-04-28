@@ -18,8 +18,10 @@ import {
   faLocationDot,
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import { useTranslation } from '../../../../src/contexts/I18nContext';
 
 export default function ControleurPlanningPage() {
+  const { t } = useTranslation();
   const [rounds, setRounds] = useState<Round[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -77,9 +79,9 @@ export default function ControleurPlanningPage() {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { color: string; text: string; icon: any }> = {
-      PLANNED: { color: 'bg-blue-100 text-blue-800', text: 'Planifiée', icon: faCalendar },
-      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', text: 'En cours', icon: faPlay },
-      COMPLETED: { color: 'bg-green-100 text-green-800', text: 'Terminée', icon: faCircleCheck },
+      PLANNED: { color: 'bg-blue-100 text-blue-800', text: t('controller.planning.legendPlanned'), icon: faCalendar },
+      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', text: t('controller.planning.legendInProgress'), icon: faPlay },
+      COMPLETED: { color: 'bg-green-100 text-green-800', text: t('controller.planning.legendCompleted'), icon: faCircleCheck },
       CANCELLED: { color: 'bg-red-100 text-red-800', text: 'Annulée', icon: faCircle },
     };
     return badges[status] || { color: 'bg-gray-100 text-gray-800', text: status, icon: faCircle };
@@ -121,10 +123,10 @@ export default function ControleurPlanningPage() {
       <div className="bg-white rounded-lg shadow p-6">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center">
           <FontAwesomeIcon icon={faCalendar} className="mr-3 text-indigo-600" />
-          Mon planning
+          {t('controller.planning.title')}
         </h1>
         <p className="text-gray-600 mt-1">
-          Consultez et gérez vos rondes planifiées
+          {t('controller.planning.subtitle')}
         </p>
       </div>
 
@@ -132,24 +134,24 @@ export default function ControleurPlanningPage() {
       <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg shadow p-6 text-white">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <p className="text-indigo-100 text-sm">Semaine</p>
+            <p className="text-indigo-100 text-sm">{t('controller.planning.week')}</p>
             <p className="text-xl font-semibold">
               {weekStart?.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} - 
               {weekEnd?.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
             </p>
           </div>
           <div>
-            <p className="text-indigo-100 text-sm">Rondes cette semaine</p>
+            <p className="text-indigo-100 text-sm">{t('controller.planning.roundsThisWeek')}</p>
             <p className="text-3xl font-bold">{totalRoundsThisWeek}</p>
           </div>
           <div>
-            <p className="text-indigo-100 text-sm">En cours / Planifiées</p>
+            <p className="text-indigo-100 text-sm">{t('controller.planning.inProgressOrPlanned')}</p>
             <p className="text-3xl font-bold">
               {rounds.filter(r => ['IN_PROGRESS', 'PLANNED'].includes(r.status)).length}
             </p>
           </div>
           <div>
-            <p className="text-indigo-100 text-sm">Terminées</p>
+            <p className="text-indigo-100 text-sm">{t('controller.planning.completed')}</p>
             <p className="text-3xl font-bold">
               {rounds.filter(r => r.status === 'COMPLETED').length}
             </p>
@@ -165,21 +167,21 @@ export default function ControleurPlanningPage() {
             className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
           >
             <FontAwesomeIcon icon={faChevronLeft} className="mr-2" />
-            Semaine précédente
+            {t('controller.planning.previousWeek')}
           </button>
           
           <button
             onClick={goToToday}
             className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors"
           >
-            Aujourd'hui
+            {t('controller.planning.today')}
           </button>
           
           <button
             onClick={() => changeWeek('next')}
             className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
           >
-            Semaine suivante
+            {t('controller.planning.nextWeek')}
             <FontAwesomeIcon icon={faChevronRight} className="ml-2" />
           </button>
         </div>
@@ -227,15 +229,15 @@ export default function ControleurPlanningPage() {
                 {isWeekendDay ? (
                   <div className="h-full flex items-center justify-center">
                     <p className="text-gray-400 text-sm text-center">
-                      {date.getDay() === 0 ? '😴 Dimanche' : '😴 Samedi'}
+                      {date.getDay() === 0 ? `😴 ${t('controller.planning.sunday')}` : `😴 ${t('controller.planning.saturday')}`}
                       <br />
-                      <span className="text-xs">Repos</span>
+                      <span className="text-xs">{t('controller.planning.rest')}</span>
                     </p>
                   </div>
                 ) : dayRounds.length === 0 ? (
                   <div className="h-full flex items-center justify-center">
                     <p className="text-gray-300 text-sm text-center">
-                      Aucune ronde
+                      {t('controller.planning.noRound')}
                     </p>
                   </div>
                 ) : (
@@ -277,7 +279,7 @@ export default function ControleurPlanningPage() {
                             </p>
                             <p className="flex items-center">
                               <FontAwesomeIcon icon={faMapPin} className="mr-1 w-3" />
-                              {round.sitesCount} site{round.sitesCount > 1 ? 's' : ''}
+                              {round.sitesCount} {t('controller.planning.sitesCount')}
                             </p>
                             {round.agent && (
                               <p className="flex items-center">
@@ -297,7 +299,7 @@ export default function ControleurPlanningPage() {
                                 />
                               </div>
                               <p className="text-xs text-gray-500 mt-1">
-                                {round.visitedSitesCount}/{round.sitesCount} sites
+                                {round.visitedSitesCount}/{round.sitesCount} {t('controller.planning.sitesCount')}
                               </p>
                             </div>
                           )}
@@ -314,23 +316,23 @@ export default function ControleurPlanningPage() {
 
       {/* Légende */}
       <div className="bg-white rounded-lg shadow p-4">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">Légende</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-3">{t('controller.planning.legend')}</h3>
         <div className="flex flex-wrap gap-4">
           <div className="flex items-center">
             <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded mr-2"></div>
-            <span className="text-sm text-gray-600">Planifiée</span>
+            <span className="text-sm text-gray-600">{t('controller.planning.legendPlanned')}</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded mr-2"></div>
-            <span className="text-sm text-gray-600">En cours</span>
+            <span className="text-sm text-gray-600">{t('controller.planning.legendInProgress')}</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 bg-green-100 border border-green-300 rounded mr-2"></div>
-            <span className="text-sm text-gray-600">Terminée</span>
+            <span className="text-sm text-gray-600">{t('controller.planning.legendCompleted')}</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded mr-2"></div>
-            <span className="text-sm text-gray-600">Week-end</span>
+            <span className="text-sm text-gray-600">{t('controller.planning.legendWeekend')}</span>
           </div>
         </div>
       </div>
@@ -338,7 +340,7 @@ export default function ControleurPlanningPage() {
       {/* Liste des rondes à venir */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">📋 Rondes à venir</h2>
+          <h2 className="text-lg font-semibold">{`📋 ${t('controller.planning.upcomingRounds')}`}</h2>
         </div>
         <div className="divide-y">
           {rounds
@@ -352,7 +354,7 @@ export default function ControleurPlanningPage() {
                     <div className="flex items-center">
                       <p className="font-medium">{round.name}</p>
                       <span className="ml-3 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                        Planifiée
+                        {t('controller.planning.legendPlanned')}
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 mt-2 text-sm text-gray-600">
@@ -369,7 +371,7 @@ export default function ControleurPlanningPage() {
                       </p>
                       <p className="flex items-center">
                         <FontAwesomeIcon icon={faLocationDot} className="mr-2 w-4" />
-                        {round.sitesCount} site{round.sitesCount > 1 ? 's' : ''}
+                        {round.sitesCount} {t('controller.planning.sitesCount')}
                       </p>
                     </div>
                   </div>
@@ -378,14 +380,14 @@ export default function ControleurPlanningPage() {
                     className="ml-4 px-3 py-2 bg-indigo-100 text-indigo-700 text-sm rounded-lg hover:bg-indigo-200"
                   >
                     <FontAwesomeIcon icon={faEye} className="mr-1" />
-                    Voir
+                    {t('controller.planning.see')}
                   </Link>
                 </div>
               </div>
             ))}
           {rounds.filter(r => r.status === 'PLANNED').length === 0 && (
             <div className="p-8 text-center text-gray-500">
-              Aucune ronde planifiée
+              {t('controller.planning.noPlannedRounds')}
             </div>
           )}
         </div>
@@ -409,29 +411,29 @@ export default function ControleurPlanningPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-gray-500">Statut</p>
+                    <p className="text-xs text-gray-500">{t('controller.planning.status')}</p>
                     <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(selectedRound.status).color}`}>
                       {getStatusBadge(selectedRound.status).text}
                     </span>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Agent assigné</p>
-                    <p className="font-medium">{selectedRound.agent?.fullName || 'Non assigné'}</p>
+                    <p className="text-xs text-gray-500">{t('controller.planning.assignedAgent')}</p>
+                    <p className="font-medium">{selectedRound.agent?.fullName || t('controller.planning.notAssigned')}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Début prévu</p>
+                    <p className="text-xs text-gray-500">{t('controller.planning.plannedStart')}</p>
                     <p>{new Date(selectedRound.scheduledStart).toLocaleString('fr-FR')}</p>
                   </div>
                   {selectedRound.scheduledEnd && (
                     <div>
-                      <p className="text-xs text-gray-500">Fin prévue</p>
+                      <p className="text-xs text-gray-500">{t('controller.planning.plannedEnd')}</p>
                       <p>{new Date(selectedRound.scheduledEnd).toLocaleString('fr-FR')}</p>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <p className="text-xs text-gray-500 mb-2">Sites à visiter</p>
+                  <p className="text-xs text-gray-500 mb-2">{t('controller.planning.sitesToVisit')}</p>
                   <div className="space-y-2">
                     {selectedRound.sites?.map((site, idx) => (
                       <div key={site.id} className="flex items-center p-2 bg-gray-50 rounded">
@@ -443,7 +445,7 @@ export default function ControleurPlanningPage() {
                           <p className="text-xs text-gray-500">{site.site.address}</p>
                         </div>
                         {site.visitedAt && (
-                          <span className="ml-auto text-green-600 text-xs">✅ Visité</span>
+                          <span className="ml-auto text-green-600 text-xs">✅ {t('controller.planning.visited')}</span>
                         )}
                       </div>
                     ))}
@@ -452,7 +454,7 @@ export default function ControleurPlanningPage() {
 
                 {selectedRound.status === 'IN_PROGRESS' && (
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Progression</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('controller.planning.progress')}</p>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-indigo-600 h-2 rounded-full"
@@ -460,7 +462,7 @@ export default function ControleurPlanningPage() {
                       />
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      {selectedRound.visitedSitesCount}/{selectedRound.sitesCount} sites visités
+                      {selectedRound.visitedSitesCount}/{selectedRound.sitesCount} {t('controller.planning.sitesVisited')}
                     </p>
                   </div>
                 )}
@@ -471,13 +473,13 @@ export default function ControleurPlanningPage() {
                   onClick={() => setShowRoundModal(false)}
                   className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                 >
-                  Fermer
+                  {t('controller.planning.close')}
                 </button>
                 <Link
                   href={`/dashboard/controleur/rounds/${selectedRound.id}`}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                 >
-                  Voir détails complets
+                  {t('controller.planning.seeFullDetails')}
                 </Link>
               </div>
             </div>

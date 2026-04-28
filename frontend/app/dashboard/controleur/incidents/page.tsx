@@ -17,8 +17,10 @@ import {
   faPlus,
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import { useTranslation } from '../../../../src/contexts/I18nContext';
 
 export default function ControleurIncidentsPage() {
+  const { t } = useTranslation();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [filteredIncidents, setFilteredIncidents] = useState<Incident[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,20 +72,20 @@ export default function ControleurIncidentsPage() {
 
   const getSeverityBadge = (severity: string) => {
     const badges: Record<string, { color: string; icon: any; label: string }> = {
-      LOW: { color: 'bg-blue-100 text-blue-800', icon: faCircle, label: 'Faible' },
-      MEDIUM: { color: 'bg-yellow-100 text-yellow-800', icon: faTriangleExclamation, label: 'Moyenne' },
-      HIGH: { color: 'bg-orange-100 text-orange-800', icon: faTriangleExclamation, label: 'Élevée' },
-      CRITICAL: { color: 'bg-red-100 text-red-800', icon: faCircleExclamation, label: 'Critique' },
+      LOW: { color: 'bg-blue-100 text-blue-800', icon: faCircle, label: t('controller.incidents.severityLow') },
+      MEDIUM: { color: 'bg-yellow-100 text-yellow-800', icon: faTriangleExclamation, label: t('controller.incidents.severityMedium') },
+      HIGH: { color: 'bg-orange-100 text-orange-800', icon: faTriangleExclamation, label: t('controller.incidents.severityHigh') },
+      CRITICAL: { color: 'bg-red-100 text-red-800', icon: faCircleExclamation, label: t('controller.incidents.severityCritical') },
     };
     return badges[severity] || { color: 'bg-gray-100 text-gray-800', icon: faCircle, label: severity };
   };
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { color: string; label: string }> = {
-      OPEN: { color: 'bg-red-100 text-red-800', label: 'Ouvert' },
-      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', label: 'En cours' },
-      RESOLVED: { color: 'bg-green-100 text-green-800', label: 'Résolu' },
-      CLOSED: { color: 'bg-gray-100 text-gray-800', label: 'Fermé' },
+      OPEN: { color: 'bg-red-100 text-red-800', label: t('controller.incidents.statusOpen') },
+      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', label: t('controller.incidents.statusInProgress') },
+      RESOLVED: { color: 'bg-green-100 text-green-800', label: t('controller.incidents.statusResolved') },
+      CLOSED: { color: 'bg-gray-100 text-gray-800', label: t('controller.incidents.statusClosed') },
     };
     return badges[status] || { color: 'bg-gray-100 text-gray-800', label: status };
   };
@@ -110,10 +112,10 @@ export default function ControleurIncidentsPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center">
               <span className="mr-3">⚠️</span>
-              Incidents
+              {t('controller.incidents.title')}
             </h1>
             <p className="text-gray-600 mt-1">
-              {filteredIncidents.length} incident{filteredIncidents.length > 1 ? 's' : ''}
+              {`${filteredIncidents.length} ${t('controller.incidents.incidentCount')}`}
             </p>
           </div>
           
@@ -123,7 +125,7 @@ export default function ControleurIncidentsPage() {
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center"
           >
             <FontAwesomeIcon icon={faPlus} className="mr-2" />
-            Déclarer un incident
+            {t('controller.incidents.reportIncident')}
           </Link>
         </div>
       </div>
@@ -131,15 +133,15 @@ export default function ControleurIncidentsPage() {
       {/* Statistiques */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">Total</p>
+          <p className="text-sm text-gray-500">{t('controller.incidents.total')}</p>
           <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">En cours</p>
+          <p className="text-sm text-gray-500">{t('controller.incidents.inProgress')}</p>
           <p className="text-2xl font-bold text-yellow-600">{stats.open}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">Critiques</p>
+          <p className="text-sm text-gray-500">{t('controller.incidents.critical')}</p>
           <p className="text-2xl font-bold text-red-600">{stats.critical}</p>
         </div>
       </div>
@@ -151,7 +153,7 @@ export default function ControleurIncidentsPage() {
             <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Rechercher..."
+              placeholder={t('controller.incidents.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -164,11 +166,11 @@ export default function ControleurIncidentsPage() {
               onChange={(e) => setSeverityFilter(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="">Toutes les sévérités</option>
-              <option value="LOW">Faible</option>
-              <option value="MEDIUM">Moyenne</option>
-              <option value="HIGH">Élevée</option>
-              <option value="CRITICAL">Critique</option>
+              <option value="">{t('controller.incidents.allSeverities')}</option>
+              <option value="LOW">{t('controller.incidents.severityLow')}</option>
+              <option value="MEDIUM">{t('controller.incidents.severityMedium')}</option>
+              <option value="HIGH">{t('controller.incidents.severityHigh')}</option>
+              <option value="CRITICAL">{t('controller.incidents.severityCritical')}</option>
             </select>
           </div>
           <div className="relative">
@@ -178,11 +180,11 @@ export default function ControleurIncidentsPage() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="">Tous les statuts</option>
-              <option value="OPEN">Ouvert</option>
-              <option value="IN_PROGRESS">En cours</option>
-              <option value="RESOLVED">Résolu</option>
-              <option value="CLOSED">Fermé</option>
+              <option value="">{t('controller.incidents.allStatuses')}</option>
+              <option value="OPEN">{t('controller.incidents.statusOpen')}</option>
+              <option value="IN_PROGRESS">{t('controller.incidents.statusInProgress')}</option>
+              <option value="RESOLVED">{t('controller.incidents.statusResolved')}</option>
+              <option value="CLOSED">{t('controller.incidents.statusClosed')}</option>
             </select>
           </div>
         </div>
@@ -193,13 +195,13 @@ export default function ControleurIncidentsPage() {
         {filteredIncidents.length === 0 ? (
           <div className="text-center py-12">
             <FontAwesomeIcon icon={faTriangleExclamation} className="text-4xl text-gray-300 mb-3" />
-            <p className="text-gray-500 mb-4">Aucun incident trouvé</p>
+            <p className="text-gray-500 mb-4">{t('controller.incidents.none')}</p>
             <Link
               href="/dashboard/controleur/incidents/create"
               className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
             >
               <FontAwesomeIcon icon={faPlus} className="mr-2" />
-              Déclarer un incident
+              {t('controller.incidents.reportIncident')}
             </Link>
           </div>
         ) : (
@@ -251,7 +253,7 @@ export default function ControleurIncidentsPage() {
                       className="ml-4 px-3 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center"
                     >
                       <FontAwesomeIcon icon={faEye} className="mr-1" />
-                      Détails
+                      {t('controller.incidents.details')}
                     </Link>
                   </div>
                 </div>

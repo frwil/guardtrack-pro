@@ -18,9 +18,11 @@ import {
   faRotate,
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import { useTranslation } from '../../../../src/contexts/I18nContext';
 
 export default function ControleurRoundsPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [plannedRounds, setPlannedRounds] = useState<Round[]>([]);
   const [inProgressRounds, setInProgressRounds] = useState<Round[]>([]);
   const [pendingValidation, setPendingValidation] = useState<Round[]>([]);
@@ -48,7 +50,7 @@ export default function ControleurRoundsPage() {
       setPendingValidation(pending);
     } catch (error) {
       console.error('Erreur de chargement:', error);
-      setError('Impossible de charger les rondes. Veuillez réessayer.');
+      setError(t('controller.rounds.loadError'));
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +66,7 @@ export default function ControleurRoundsPage() {
       }
     } catch (error) {
       console.error('Erreur démarrage:', error);
-      alert('Erreur lors du démarrage de la ronde');
+      alert(t('controller.rounds.errorStarting'));
     } finally {
       setIsStarting(null);
     }
@@ -72,10 +74,10 @@ export default function ControleurRoundsPage() {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { color: string; text: string; icon: any }> = {
-      PLANNED: { color: 'bg-blue-100 text-blue-800', text: 'Planifiée', icon: faClock },
-      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', text: 'En cours', icon: faPlay },
-      COMPLETED: { color: 'bg-green-100 text-green-800', text: 'Terminée', icon: faCheckCircle },
-      CANCELLED: { color: 'bg-red-100 text-red-800', text: 'Annulée', icon: faClock },
+      PLANNED: { color: 'bg-blue-100 text-blue-800', text: t('controller.rounds.statusPlanned'), icon: faClock },
+      IN_PROGRESS: { color: 'bg-yellow-100 text-yellow-800', text: t('controller.rounds.statusInProgress'), icon: faPlay },
+      COMPLETED: { color: 'bg-green-100 text-green-800', text: t('controller.rounds.statusCompleted'), icon: faCheckCircle },
+      CANCELLED: { color: 'bg-red-100 text-red-800', text: t('controller.rounds.statusCancelled'), icon: faClock },
     };
     return badges[status] || { color: 'bg-gray-100 text-gray-800', text: status, icon: faClock };
   };
@@ -104,7 +106,7 @@ export default function ControleurRoundsPage() {
             <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mt-3">
               <div className="flex items-center">
                 <FontAwesomeIcon icon={faUser} className="mr-2 text-gray-400 w-4" />
-                <span>Agent : {round.agent?.fullName || 'Non assigné'}</span>
+                <span>{t('controller.rounds.agentLabel') + ' '}{round.agent?.fullName || t('controller.rounds.notAssigned')}</span>
               </div>
               <div className="flex items-center">
                 <FontAwesomeIcon icon={faClock} className="mr-2 text-gray-400 w-4" />
@@ -112,7 +114,7 @@ export default function ControleurRoundsPage() {
               </div>
               <div className="flex items-center col-span-2">
                 <FontAwesomeIcon icon={faMapPin} className="mr-2 text-gray-400 w-4" />
-                <span>{round.sitesCount} site{round.sitesCount > 1 ? 's' : ''} à visiter</span>
+                <span>{round.sitesCount} {t('controller.rounds.sitesToVisit')}</span>
               </div>
             </div>
 
@@ -120,8 +122,8 @@ export default function ControleurRoundsPage() {
             {round.status === 'IN_PROGRESS' && (
               <div className="mt-3">
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-500">Progression</span>
-                  <span className="font-medium">{round.visitedSitesCount}/{round.sitesCount} sites</span>
+                  <span className="text-gray-500">{t('controller.rounds.progress')}</span>
+                  <span className="font-medium">{round.visitedSitesCount}/{round.sitesCount} {t('controller.rounds.sites')}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
@@ -154,7 +156,7 @@ export default function ControleurRoundsPage() {
                 ) : (
                   <FontAwesomeIcon icon={faPlay} className="mr-1" />
                 )}
-                Démarrer
+                {t('controller.rounds.start')}
               </button>
             )}
             {round.status === 'IN_PROGRESS' && (
@@ -163,7 +165,7 @@ export default function ControleurRoundsPage() {
                 className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 flex items-center whitespace-nowrap"
               >
                 <FontAwesomeIcon icon={faPlay} className="mr-1" />
-                Continuer
+                {t('controller.rounds.continue')}
               </Link>
             )}
             <Link
@@ -171,7 +173,7 @@ export default function ControleurRoundsPage() {
               className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 flex items-center whitespace-nowrap"
             >
               <FontAwesomeIcon icon={faEye} className="mr-1" />
-              Détails
+              {t('controller.rounds.details')}
             </Link>
           </div>
         </div>
@@ -186,7 +188,7 @@ export default function ControleurRoundsPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center">
             <span className="mr-3">🔄</span>
-            Mes rondes
+            {t('controller.rounds.title')}
           </h1>
         </div>
         <div className="bg-white rounded-lg shadow p-12 text-center">
@@ -197,7 +199,7 @@ export default function ControleurRoundsPage() {
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center mx-auto"
           >
             <FontAwesomeIcon icon={faRotate} className="mr-2" />
-            Réessayer
+            {t('common.retry')}
           </button>
         </div>
       </div>
@@ -211,12 +213,12 @@ export default function ControleurRoundsPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center">
             <span className="mr-3">🔄</span>
-            Mes rondes
+            {t('controller.rounds.title')}
           </h1>
         </div>
         <div className="bg-white rounded-lg shadow p-12 flex items-center justify-center">
           <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-indigo-600" />
-          <span className="ml-3 text-gray-600">Chargement des rondes...</span>
+          <span className="ml-3 text-gray-600">{t('controller.rounds.loading')}</span>
         </div>
       </div>
     );
@@ -229,7 +231,7 @@ export default function ControleurRoundsPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center">
             <span className="mr-3">🔄</span>
-            Mes rondes
+            {t('controller.rounds.title')}
           </h1>
           <div className="flex items-center space-x-3">
             <button
@@ -244,7 +246,7 @@ export default function ControleurRoundsPage() {
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center"
             >
               <FontAwesomeIcon icon={faPlus} className="mr-2" />
-              Nouvelle ronde
+              {t('controller.rounds.newRound')}
             </Link>
           </div>
         </div>
@@ -278,7 +280,7 @@ export default function ControleurRoundsPage() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              📋 Planifiées ({plannedRounds.length})
+              {`📋 ${t('controller.rounds.tabPlanned')} (${plannedRounds.length})`}
             </button>
             <button
               onClick={() => setActiveTab('in-progress')}
@@ -288,7 +290,7 @@ export default function ControleurRoundsPage() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              ▶️ En cours ({inProgressRounds.length})
+              {`▶️ ${t('controller.rounds.tabInProgress')} (${inProgressRounds.length})`}
             </button>
             <button
               onClick={() => setActiveTab('pending')}
@@ -298,7 +300,7 @@ export default function ControleurRoundsPage() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              ✅ À valider ({pendingValidation.length})
+              {`✅ ${t('controller.rounds.tabPending')} (${pendingValidation.length})`}
             </button>
           </div>
         </div>
@@ -309,9 +311,9 @@ export default function ControleurRoundsPage() {
             <div className="text-center py-8">
               <span className="text-4xl mb-3 block">📋</span>
               <p className="text-gray-500">
-                {activeTab === 'planned' && 'Aucune ronde planifiée'}
-                {activeTab === 'in-progress' && 'Aucune ronde en cours'}
-                {activeTab === 'pending' && 'Aucune ronde en attente de validation'}
+                {activeTab === 'planned' && t('controller.rounds.noPlanned')}
+                {activeTab === 'in-progress' && t('controller.rounds.noInProgress')}
+                {activeTab === 'pending' && t('controller.rounds.noPending')}
               </p>
               {activeTab === 'planned' && (
                 <Link
@@ -319,7 +321,7 @@ export default function ControleurRoundsPage() {
                   className="mt-4 inline-block px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                 >
                   <FontAwesomeIcon icon={faPlus} className="mr-2" />
-                  Créer une ronde
+                  {t('controller.rounds.createRound')}
                 </Link>
               )}
             </div>

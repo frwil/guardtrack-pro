@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../../src/stores/authStore';
 import { presencesService, Presence } from '../../../src/services/api/presences';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useTranslation } from '../../../src/contexts/I18nContext';
 import {
   faUser,
   faClock,
@@ -43,6 +44,7 @@ import {
 
 export default function ControleurDashboardPage() {
   const { user } = useAuthStore();
+  const { t } = useTranslation();
   
   // États
   const [pendingPresences, setPendingPresences] = useState<Presence[]>([]);
@@ -121,7 +123,7 @@ export default function ControleurDashboardPage() {
       setSelectedPresence(null);
     } catch (error) {
       console.error('Erreur de validation:', error);
-      alert('Erreur lors de la validation');
+      alert(t('controller.dashboard.errorValidating'));
     } finally {
       setIsSubmitting(false);
     }
@@ -130,7 +132,7 @@ export default function ControleurDashboardPage() {
   const handleReject = async () => {
     if (!selectedPresence) return;
     if (!rejectionReason.trim()) {
-      alert('Veuillez préciser un motif de rejet');
+      alert(t('controller.dashboard.reasonRequired'));
       return;
     }
     
@@ -143,7 +145,7 @@ export default function ControleurDashboardPage() {
       setRejectionReason('');
     } catch (error) {
       console.error('Erreur de rejet:', error);
-      alert('Erreur lors du rejet');
+      alert(t('controller.dashboard.errorRejecting'));
     } finally {
       setIsSubmitting(false);
     }
@@ -187,11 +189,11 @@ export default function ControleurDashboardPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center">
               <FontAwesomeIcon icon={faClipboardCheck} className="mr-3 text-indigo-600" />
-              Validation des présences
+              {t('controller.dashboard.title')}
             </h1>
             <p className="text-gray-600 mt-1 flex items-center">
               <FontAwesomeIcon icon={faUser} className="mr-2 text-gray-400" />
-              Contrôleur : {user?.fullName}
+              {t('controller.dashboard.controller')} {user?.fullName}
             </p>
           </div>
           <button
@@ -199,7 +201,7 @@ export default function ControleurDashboardPage() {
             className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
           >
             <FontAwesomeIcon icon={faRotate} className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Actualiser
+            {t('controller.dashboard.refresh')}
           </button>
         </div>
       </div>
@@ -209,7 +211,7 @@ export default function ControleurDashboardPage() {
         <div className="bg-white rounded-lg shadow p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">En attente</p>
+              <p className="text-sm text-gray-500">{t('controller.dashboard.pending')}</p>
               <p className="text-3xl font-bold text-indigo-600">{stats.total}</p>
             </div>
             <FontAwesomeIcon icon={faClock} className="text-3xl text-indigo-200" />
@@ -218,7 +220,7 @@ export default function ControleurDashboardPage() {
         <div className="bg-white rounded-lg shadow p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Suspicion élevée</p>
+              <p className="text-sm text-gray-500">{t('controller.dashboard.highSuspicion')}</p>
               <p className="text-3xl font-bold text-orange-600">{stats.highSuspicion}</p>
             </div>
             <FontAwesomeIcon icon={faExclamationTriangle} className="text-3xl text-orange-200" />
@@ -227,7 +229,7 @@ export default function ControleurDashboardPage() {
         <div className="bg-white rounded-lg shadow p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Aujourd'hui</p>
+              <p className="text-sm text-gray-500">{t('controller.dashboard.today')}</p>
               <p className="text-3xl font-bold text-green-600">{stats.todayTotal}</p>
             </div>
             <FontAwesomeIcon icon={faCalendar} className="text-3xl text-green-200" />
@@ -242,7 +244,7 @@ export default function ControleurDashboardPage() {
           <div className="mb-4">
             <h2 className="text-lg font-semibold mb-3 flex items-center">
               <FontAwesomeIcon icon={faClock} className="mr-2 text-yellow-600" />
-              Présences en attente
+              {t('controller.dashboard.pendingPresences')}
               <span className="ml-2 text-sm font-normal text-gray-500">
                 ({filteredPresences.length})
               </span>
@@ -273,7 +275,7 @@ export default function ControleurDashboardPage() {
                   onChange={(e) => setFilterSite(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-white"
                 >
-                  <option value="">Tous les sites</option>
+                  <option value="">{t('controller.dashboard.allSites')}</option>
                   {uniqueSites.map(site => (
                     <option key={site} value={site}>{site}</option>
                   ))}
@@ -285,13 +287,13 @@ export default function ControleurDashboardPage() {
           {isLoading ? (
             <div className="text-center py-12">
               <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-indigo-600 mb-3" />
-              <p className="text-gray-500">Chargement...</p>
+              <p className="text-gray-500">{t('common.loading')}</p>
             </div>
           ) : filteredPresences.length === 0 ? (
             <div className="text-center py-12">
               <FontAwesomeIcon icon={faClipboardCheck} className="text-4xl text-gray-300 mb-3" />
-              <p className="text-gray-500">Aucune présence en attente</p>
-              <p className="text-sm text-gray-400 mt-1">Tout est à jour !</p>
+              <p className="text-gray-500">{t('controller.dashboard.noPending')}</p>
+              <p className="text-sm text-gray-400 mt-1">{t('controller.dashboard.allUpToDate')}</p>
             </div>
           ) : (
             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
@@ -344,7 +346,7 @@ export default function ControleurDashboardPage() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold flex items-center">
                   <FontAwesomeIcon icon={faEye} className="mr-2 text-indigo-600" />
-                  Détail de la présence
+                  {t('controller.dashboard.presenceDetail')}
                 </h2>
                 <div className="flex items-center space-x-2">
                   <button
@@ -357,7 +359,7 @@ export default function ControleurDashboardPage() {
                     ) : (
                       <FontAwesomeIcon icon={faCheck} className="mr-2" />
                     )}
-                    Valider
+                    {t('controller.dashboard.validate')}
                   </button>
                   <button
                     onClick={() => setShowRejectModal(true)}
@@ -365,7 +367,7 @@ export default function ControleurDashboardPage() {
                     className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center"
                   >
                     <FontAwesomeIcon icon={faTimes} className="mr-2" />
-                    Rejeter
+                    {t('controller.dashboard.reject')}
                   </button>
                 </div>
               </div>
@@ -375,15 +377,15 @@ export default function ControleurDashboardPage() {
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="font-medium text-gray-700 mb-3 flex items-center">
                     <FontAwesomeIcon icon={faIdCard} className="mr-2 text-indigo-500" />
-                    Agent
+                    {t('controller.dashboard.agent')}
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-xs text-gray-500">Nom complet</p>
+                      <p className="text-xs text-gray-500">{t('controller.dashboard.fullName')}</p>
                       <p className="font-medium">{selectedPresence.agent.fullName}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Heure d'arrivée</p>
+                      <p className="text-xs text-gray-500">{t('controller.dashboard.arrivalTime')}</p>
                       <p className="font-medium flex items-center">
                         <FontAwesomeIcon icon={faClock} className="mr-1 text-gray-400 text-xs" />
                         {formatTime(selectedPresence.checkIn)}
@@ -396,15 +398,15 @@ export default function ControleurDashboardPage() {
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="font-medium text-gray-700 mb-3 flex items-center">
                     <FontAwesomeIcon icon={faBuilding} className="mr-2 text-indigo-500" />
-                    Site
+                    {t('controller.dashboard.site')}
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-xs text-gray-500">Nom du site</p>
+                      <p className="text-xs text-gray-500">{t('controller.dashboard.siteName')}</p>
                       <p className="font-medium">{selectedPresence.site.name}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Coordonnées GPS</p>
+                      <p className="text-xs text-gray-500">{t('controller.dashboard.gpsCoordinates')}</p>
                       <p className="font-medium text-sm">
                         {selectedPresence.gpsLatitude && selectedPresence.gpsLongitude ? (
                           <span className="flex items-center">
@@ -413,7 +415,7 @@ export default function ControleurDashboardPage() {
                             {parseFloat(selectedPresence.gpsLongitude).toFixed(6)}
                           </span>
                         ) : (
-                          <span className="text-gray-400">Non disponible</span>
+                          <span className="text-gray-400">{t('controller.dashboard.notAvailable')}</span>
                         )}
                       </p>
                     </div>
@@ -424,12 +426,12 @@ export default function ControleurDashboardPage() {
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="font-medium text-gray-700 mb-3 flex items-center">
                     <FontAwesomeIcon icon={faLightbulb} className="mr-2 text-yellow-500" />
-                    Analyse et suspicion
+                    {t('controller.dashboard.analysisAndSuspicion')}
                   </h3>
                   
                   <div className="mb-3">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-gray-600">Score de suspicion</span>
+                      <span className="text-sm text-gray-600">{t('controller.dashboard.suspicionScore')}</span>
                       <span className={`font-bold ${
                         (selectedPresence.suspicionScore || 0) >= 70 ? 'text-red-600' :
                         (selectedPresence.suspicionScore || 0) >= 50 ? 'text-orange-600' :
@@ -456,25 +458,25 @@ export default function ControleurDashboardPage() {
                     <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                       <p className="text-sm text-orange-800 flex items-center">
                         <FontAwesomeIcon icon={faExclamationTriangle} className="mr-2" />
-                        Points d'attention :
+                        {t('controller.dashboard.attentionPoints')}
                       </p>
                       <ul className="mt-2 space-y-1 text-sm text-orange-700">
                         {!selectedPresence.gpsLatitude && (
                           <li className="flex items-center">
                             <FontAwesomeIcon icon={faCircle} className="mr-2 text-[6px]" />
-                            Géolocalisation manquante
+                            {t('controller.dashboard.missingGeolocation')}
                           </li>
                         )}
                         {!selectedPresence.hasPhoto && (
                           <li className="flex items-center">
                             <FontAwesomeIcon icon={faCircle} className="mr-2 text-[6px]" />
-                            Photo non fournie
+                            {t('controller.dashboard.missingPhoto')}
                           </li>
                         )}
                         {selectedPresence.suspicionScore && selectedPresence.suspicionScore > 50 && (
                           <li className="flex items-center">
                             <FontAwesomeIcon icon={faCircle} className="mr-2 text-[6px]" />
-                            Score de suspicion élevé
+                            {t('controller.dashboard.highSuspicionScore')}
                           </li>
                         )}
                       </ul>
@@ -486,7 +488,7 @@ export default function ControleurDashboardPage() {
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="font-medium text-gray-700 mb-3 flex items-center">
                     <FontAwesomeIcon icon={faCamera} className="mr-2 text-indigo-500" />
-                    Photo
+                    {t('controller.dashboard.photo')}
                   </h3>
                   
                   {selectedPresence.hasPhoto ? (
@@ -500,14 +502,14 @@ export default function ControleurDashboardPage() {
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 rounded-lg flex items-center justify-center transition-all">
                         <span className="text-white opacity-0 group-hover:opacity-100 transition-all">
                           <FontAwesomeIcon icon={faEye} className="mr-2" />
-                          Voir la photo
+                          {t('controller.dashboard.seePhoto')}
                         </span>
                       </div>
                     </button>
                   ) : (
                     <p className="text-gray-400 text-center py-4 flex items-center justify-center">
                       <FontAwesomeIcon icon={faCamera} className="mr-2" />
-                      Aucune photo fournie
+                      {t('controller.dashboard.noPhoto')}
                     </p>
                   )}
                 </div>
@@ -516,9 +518,9 @@ export default function ControleurDashboardPage() {
           ) : (
             <div className="bg-white rounded-lg shadow p-12 text-center">
               <FontAwesomeIcon icon={faClipboardCheck} className="text-5xl text-gray-300 mb-4" />
-              <p className="text-gray-500 text-lg">Sélectionnez une présence</p>
+              <p className="text-gray-500 text-lg">{t('controller.dashboard.selectPresence')}</p>
               <p className="text-gray-400 text-sm mt-1">
-                pour voir les détails et valider
+                {t('controller.dashboard.selectPresenceHint')}
               </p>
             </div>
           )}
@@ -531,18 +533,18 @@ export default function ControleurDashboardPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
             <h2 className="text-xl font-semibold mb-4 flex items-center">
               <FontAwesomeIcon icon={faCircleXmark} className="mr-2 text-red-600" />
-              Rejeter la présence
+              {t('controller.dashboard.rejectTitle')}
             </h2>
             
             <p className="text-gray-600 mb-4">
-              Vous allez rejeter la présence de <strong>{selectedPresence.agent.fullName}</strong>.
+              {t('controller.dashboard.rejectMessage')} <strong>{selectedPresence.agent.fullName}</strong>.
               Veuillez préciser le motif.
             </p>
             
             <textarea
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
-              placeholder="Motif du rejet..."
+              placeholder={t('controller.dashboard.reasonPlaceholder')}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
               rows={3}
             />
@@ -555,7 +557,7 @@ export default function ControleurDashboardPage() {
                 }}
                 className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
-                Annuler
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleReject}
@@ -567,7 +569,7 @@ export default function ControleurDashboardPage() {
                 ) : (
                   <FontAwesomeIcon icon={faCheck} className="mr-2" />
                 )}
-                Confirmer le rejet
+                {t('controller.dashboard.confirmReject')}
               </button>
             </div>
           </div>
