@@ -45,7 +45,8 @@
     "mySchedule": "Mon planning",
     "validation": "Validation",
     "agents": "Agents",
-    "planning": "Planning"
+    "planning": "Planning",
+    "backup": "Backup"
   },
   "network": {
     "offline": "Mode hors ligne - Les données seront synchronisées au retour de la connexion",
