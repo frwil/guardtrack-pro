@@ -12,8 +12,8 @@ interface AuthState {
   _hasHydrated: boolean;
 
   // Actions
-  login: (email: string, password: string) => Promise<boolean>;
-  loginWithPin: (email: string, pin: string) => Promise<boolean>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
+  loginWithPin: (email: string, pin: string, rememberMe?: boolean) => Promise<boolean>;
   logout: () => void;
   fetchUser: () => Promise<void>;
   clearError: () => void;
@@ -31,11 +31,11 @@ export const useAuthStore = create<AuthState>()(
 
       setHasHydrated: (v) => set({ _hasHydrated: v }),
 
-      login: async (email: string, password: string) => {
+      login: async (email: string, password: string, rememberMe = true) => {
         set({ isLoading: true, error: null });
-        
+
         try {
-          const response = await authService.login({ email, password });
+          const response = await authService.login({ email, password }, rememberMe);
           
           if (response?.user) {
             set({
@@ -60,11 +60,11 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      loginWithPin: async (email: string, pin: string) => {
+      loginWithPin: async (email: string, pin: string, rememberMe = true) => {
         set({ isLoading: true, error: null });
 
         try {
-          const response = await authService.verifyPin({ email, pin });
+          const response = await authService.verifyPin({ email, pin }, rememberMe);
 
           if (response?.user) {
             // Sauvegarder le hash du PIN pour la connexion offline

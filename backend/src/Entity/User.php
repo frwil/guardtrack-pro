@@ -90,6 +90,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 5, nullable: true)]
     private ?string $pinCode = null;
 
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $resetPasswordToken = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $resetPasswordTokenExpiresAt = null;
+
     #[ORM\Column(length: 20, nullable: true)]
     #[Groups(['user:read', 'user:list', 'user:write'])]
     private ?string $phone = null;
@@ -656,6 +662,19 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         }
 
         return $data;
+    }
+
+    public function getResetPasswordToken(): ?string { return $this->resetPasswordToken; }
+    public function setResetPasswordToken(?string $token): self { $this->resetPasswordToken = $token; return $this; }
+
+    public function getResetPasswordTokenExpiresAt(): ?\DateTimeImmutable { return $this->resetPasswordTokenExpiresAt; }
+    public function setResetPasswordTokenExpiresAt(?\DateTimeImmutable $dt): self { $this->resetPasswordTokenExpiresAt = $dt; return $this; }
+
+    public function isResetTokenValid(string $token): bool
+    {
+        return $this->resetPasswordToken === $token
+            && $this->resetPasswordTokenExpiresAt !== null
+            && $this->resetPasswordTokenExpiresAt > new \DateTimeImmutable();
     }
 
     public function __toString(): string

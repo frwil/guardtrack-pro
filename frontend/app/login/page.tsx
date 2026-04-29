@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "../../src/stores/authStore";
+import { authService } from "../../src/services/api/auth";
 import { apiConfig } from "../../src/services/api/config";
 import { ApiConfigModal } from "../../src/components/ApiConfigModal";
 import { useAppSettings } from "../../src/contexts/AppSettingsContext";
@@ -24,6 +25,13 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+
+  // Forgot password
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotStep, setForgotStep] = useState<"form" | "sent">("form");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState("");
 
   useEffect(() => {
     setCurrentApiUrl(apiConfig.getApiUrl());
@@ -61,9 +69,9 @@ export default function LoginPage() {
 
     let success = false;
     if (mode === "password") {
-      success = await login(email, password);
+      success = await login(email, password, rememberMe);
     } else {
-      success = await loginWithPin(email, pin);
+      success = await loginWithPin(email, pin, rememberMe);
     }
 
     if (success) {
@@ -88,6 +96,29 @@ export default function LoginPage() {
           router.push("/dashboard");
       }
     }
+  };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) { setForgotError("Veuillez entrer votre email."); return; }
+    setForgotLoading(true);
+    setForgotError("");
+    try {
+      const frontendUrl = typeof window !== "undefined" ? window.location.origin : "";
+      await authService.forgotPassword(forgotEmail, frontendUrl);
+      setForgotStep("sent");
+    } catch {
+      setForgotError("Une erreur est survenue. Réessayez.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const closeForgot = () => {
+    setShowForgot(false);
+    setForgotEmail("");
+    setForgotStep("form");
+    setForgotError("");
   };
 
   const handleConfigSuccess = () => {
@@ -308,12 +339,13 @@ export default function LoginPage() {
                 </div>
 
                 <div className="text-sm">
-                  <a
-                    href="#"
+                  <button
+                    type="button"
+                    onClick={() => { setForgotEmail(email); setShowForgot(true); }}
                     className="font-medium text-indigo-600 hover:text-indigo-500"
                   >
                     {t('auth.forgotPassword')}
-                  </a>
+                  </button>
                 </div>
               </div>
             )}
@@ -396,6 +428,69 @@ export default function LoginPage() {
         onClose={() => setShowConfig(false)}
         onSuccess={handleConfigSuccess}
       />
+
+      {/* Modal mot de passe oublié */}
+      {showForgot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={closeForgot}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">🔑 Mot de passe oublié</h3>
+              <button onClick={closeForgot} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+
+            {forgotStep === "form" ? (
+              <form onSubmit={handleForgotSubmit} className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Saisissez votre adresse email. Vous recevrez un lien pour réinitialiser votre mot de passe.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Adresse email</label>
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => { setForgotEmail(e.target.value); setForgotError(""); }}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    placeholder="votre@email.com"
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                {forgotError && (
+                  <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{forgotError}</p>
+                )}
+
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={closeForgot}
+                    className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                    Annuler
+                  </button>
+                  <button type="submit" disabled={forgotLoading}
+                    className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50">
+                    {forgotLoading ? "⏳ Envoi…" : "Envoyer le lien"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="text-center py-4 space-y-3">
+                <p className="text-3xl">📧</p>
+                <p className="text-sm text-gray-700 font-medium">Instructions envoyées</p>
+                <p className="text-sm text-gray-500">
+                  Si l'adresse <span className="font-medium">{forgotEmail}</span> est associée à un compte,
+                  un lien de réinitialisation a été envoyé. Vérifiez également vos courriers indésirables.
+                </p>
+                <p className="text-xs text-gray-400">
+                  Sans email ? Contactez votre administrateur.
+                </p>
+                <button onClick={closeForgot}
+                  className="mt-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 w-full">
+                  Fermer
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
