@@ -7,6 +7,7 @@ use App\Entity\User;
 use App\Repository\IncidentRepository;
 use App\Repository\SiteRepository;
 use App\Repository\UserRepository;
+use App\Service\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -22,7 +23,8 @@ class IncidentController extends AbstractController
         private EntityManagerInterface $entityManager,
         private IncidentRepository $incidentRepository,
         private SiteRepository $siteRepository,
-        private UserRepository $userRepository
+        private UserRepository $userRepository,
+        private NotificationService $notificationService
     ) {
     }
 
@@ -142,9 +144,28 @@ class IncidentController extends AbstractController
         
         $this->entityManager->persist($incident);
         $this->entityManager->flush();
-        
-        // Notifier les superviseurs (à implémenter)
-        
+
+        // Notifier la hiérarchie selon la sévérité
+        $severityLabel = match ($incident->getSeverity()) {
+            'CRITICAL' => '🔴 CRITIQUE',
+            'HIGH'     => '🟠 Élevée',
+            'MEDIUM'   => '🟡 Moyenne',
+            default    => '🟢 Faible',
+        };
+        $notifSeverity = match ($incident->getSeverity()) {
+            'CRITICAL' => 'CRITICAL',
+            'HIGH'     => 'ERROR',
+            'MEDIUM'   => 'WARNING',
+            default    => 'INFO',
+        };
+        $this->notificationService->notifyHierarchy(
+            $user,
+            sprintf('🚨 Incident signalé — %s', $severityLabel),
+            sprintf('%s a signalé un incident "%s" sur le site "%s" : %s', $user->getFullName(), $incident->getTitle(), $site->getName(), $incident->getCategory()),
+            $notifSeverity,
+            '/dashboard/superviseur/incidents/' . $incident->getId()
+        );
+
         return $this->json([
             'id' => $incident->getId(),
             'title' => $incident->getTitle(),
@@ -208,9 +229,20 @@ class IncidentController extends AbstractController
         
         $incident->setAssignedTo($assignedTo);
         $incident->setStatus($assignedTo ? 'IN_PROGRESS' : 'OPEN');
-        
+
         $this->entityManager->flush();
-        
+
+        // Notifier la personne assignée
+        if ($assignedTo) {
+            $this->notificationService->send(
+                $assignedTo,
+                '📌 Incident assigné',
+                sprintf('L\'incident "%s" sur le site "%s" vous a été assigné. Catégorie : %s, Sévérité : %s.', $incident->getTitle(), $incident->getSite()->getName(), $incident->getCategory(), $incident->getSeverity()),
+                'WARNING',
+                '/dashboard/controleur/incidents/' . $incident->getId()
+            );
+        }
+
         return $this->json([
             'assignedTo' => $assignedTo ? [
                 'id' => $assignedTo->getId(),
@@ -245,9 +277,18 @@ class IncidentController extends AbstractController
         $incident->setStatus('RESOLVED');
         $incident->setResolvedAt(new \DateTimeImmutable());
         $incident->setResolution($data['resolution'] ?? null);
-        
+
         $this->entityManager->flush();
-        
+
+        // Notifier le déclarant : incident résolu
+        $this->notificationService->send(
+            $incident->getReporter(),
+            '✅ Incident résolu',
+            sprintf('L\'incident "%s" que vous avez signalé sur le site "%s" a été résolu.', $incident->getTitle(), $incident->getSite()->getName()),
+            'SUCCESS',
+            '/dashboard/agent/incidents/' . $incident->getId()
+        );
+
         return $this->json([
             'status' => 'RESOLVED',
             'resolvedAt' => $incident->getResolvedAt()->format('c'),
@@ -271,9 +312,21 @@ class IncidentController extends AbstractController
         $newSeverity = array_search($newLevel, $severityLevels);
         
         $incident->setSeverity($newSeverity);
-        
+
         $this->entityManager->flush();
-        
+
+        // Notifier les superviseurs et admins si escalade vers CRITICAL ou HIGH
+        if (in_array($newSeverity, ['CRITICAL', 'HIGH'])) {
+            $notifSeverity = $newSeverity === 'CRITICAL' ? 'CRITICAL' : 'ERROR';
+            $this->notificationService->sendToRole(
+                'ROLE_SUPERVISEUR',
+                '⬆️ Incident escaladé',
+                sprintf('L\'incident "%s" sur le site "%s" a été escaladé à la sévérité %s.', $incident->getTitle(), $incident->getSite()->getName(), $newSeverity),
+                $notifSeverity,
+                '/dashboard/superviseur/incidents/' . $incident->getId()
+            );
+        }
+
         return $this->json([
             'severity' => $newSeverity,
         ]);
@@ -291,9 +344,18 @@ class IncidentController extends AbstractController
         
         $incident->setStatus('CLOSED');
         $incident->setResolvedAt(new \DateTimeImmutable());
-        
+
         $this->entityManager->flush();
-        
+
+        // Notifier le déclarant : incident clôturé
+        $this->notificationService->send(
+            $incident->getReporter(),
+            '🔒 Incident clôturé',
+            sprintf('L\'incident "%s" que vous avez signalé sur le site "%s" a été clôturé.', $incident->getTitle(), $incident->getSite()->getName()),
+            'INFO',
+            '/dashboard/agent/incidents/' . $incident->getId()
+        );
+
         return $this->json(['status' => 'CLOSED']);
     }
 

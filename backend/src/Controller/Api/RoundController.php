@@ -12,6 +12,7 @@ use App\Repository\UserRepository;
 use App\Repository\PresenceRepository;
 use App\Repository\RoundSiteRepository;
 use App\Repository\AssignmentRepository;
+use App\Service\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,7 +31,8 @@ class RoundController extends AbstractController
         private UserRepository $userRepository,
         private PresenceRepository $presenceRepository,
         private RoundSiteRepository $roundSiteRepository,
-        private AssignmentRepository $assignmentRepository
+        private AssignmentRepository $assignmentRepository,
+        private NotificationService $notificationService
     ) {}
 
     // ============================================================
@@ -152,6 +154,17 @@ class RoundController extends AbstractController
 
         $this->entityManager->persist($round);
         $this->entityManager->flush();
+
+        // Notifier l'agent : nouvelle tournée planifiée
+        if ($round->getAgent()) {
+            $this->notificationService->send(
+                $round->getAgent(),
+                '🗺️ Nouvelle tournée planifiée',
+                sprintf('Une tournée "%s" vous a été assignée pour le %s (%d site(s)).', $round->getName(), $round->getScheduledStart()->format('d/m/Y à H:i'), $round->getRoundSites()->count()),
+                'INFO',
+                '/dashboard/agent/rounds'
+            );
+        }
 
         return $this->json([
             'id' => $round->getId(),
@@ -309,6 +322,17 @@ class RoundController extends AbstractController
 
         $this->entityManager->flush();
 
+        // Notifier le superviseur : tournée démarrée
+        if ($round->getSupervisor()) {
+            $this->notificationService->send(
+                $round->getSupervisor(),
+                '▶️ Tournée démarrée',
+                sprintf('%s a démarré la tournée "%s" à %s.', $user->getFullName(), $round->getName(), $round->getActualStart()->format('H:i')),
+                'INFO',
+                '/dashboard/controleur/rounds/' . $round->getId()
+            );
+        }
+
         return $this->json([
             'status' => 'IN_PROGRESS',
             'actualStart' => $round->getActualStart()->format('c'),
@@ -398,6 +422,17 @@ class RoundController extends AbstractController
 
         $this->entityManager->flush();
 
+        // Notifier le superviseur : tournée terminée par l'agent
+        if ($round->getSupervisor()) {
+            $this->notificationService->send(
+                $round->getSupervisor(),
+                '✅ Tournée terminée',
+                sprintf('%s a terminé la tournée "%s" à %s.', $user->getFullName(), $round->getName(), $round->getActualEnd()->format('H:i')),
+                'SUCCESS',
+                '/dashboard/controleur/rounds/' . $round->getId()
+            );
+        }
+
         return $this->json([
             'status' => 'COMPLETED',
             'actualEnd' => $round->getActualEnd()->format('c'),
@@ -483,6 +518,17 @@ class RoundController extends AbstractController
 
         $round->setStatus('CANCELLED');
         $this->entityManager->flush();
+
+        // Notifier l'agent : tournée annulée
+        if ($round->getAgent()) {
+            $this->notificationService->send(
+                $round->getAgent(),
+                '🚫 Tournée annulée',
+                sprintf('La tournée "%s" prévue le %s a été annulée.', $round->getName(), $round->getScheduledStart()->format('d/m/Y à H:i')),
+                'WARNING',
+                '/dashboard/agent/rounds'
+            );
+        }
 
         return $this->json(['status' => 'CANCELLED']);
     }
@@ -661,6 +707,17 @@ class RoundController extends AbstractController
         $allVisited = $round->getRoundSites()->forAll(fn($i, $rs) => $rs->getVisitedAt() !== null);
 
         $this->entityManager->flush();
+
+        // Notifier le superviseur : tous les sites visités
+        if ($allVisited && $round->getSupervisor()) {
+            $this->notificationService->send(
+                $round->getSupervisor(),
+                '🎯 Tous les sites visités',
+                sprintf('%s a visité tous les sites de la tournée "%s".', $user->getFullName(), $round->getName()),
+                'SUCCESS',
+                '/dashboard/controleur/rounds/' . $round->getId()
+            );
+        }
 
         return $this->json([
             'visited' => true,

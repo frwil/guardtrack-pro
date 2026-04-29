@@ -7,6 +7,7 @@ use App\Entity\User;
 use App\Repository\AssignmentRepository;
 use App\Repository\SiteRepository;
 use App\Repository\UserRepository;
+use App\Service\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -22,7 +23,8 @@ class AssignmentController extends AbstractController
         private EntityManagerInterface $entityManager,
         private AssignmentRepository $assignmentRepository,
         private UserRepository $userRepository,
-        private SiteRepository $siteRepository
+        private SiteRepository $siteRepository,
+        private NotificationService $notificationService
     ) {
     }
 
@@ -213,7 +215,16 @@ class AssignmentController extends AbstractController
         
         $this->entityManager->persist($assignment);
         $this->entityManager->flush();
-        
+
+        // Notifier l'agent : nouvelle affectation
+        $this->notificationService->send(
+            $agent,
+            '📋 Nouvelle affectation',
+            sprintf('Vous avez été affecté(e) au site "%s" à partir du %s.', $site->getName(), $assignment->getStartDate()->format('d/m/Y')),
+            'INFO',
+            '/dashboard/agent/assignments'
+        );
+
         return $this->json([
             'id' => $assignment->getId(),
             'message' => 'Assignment created successfully',
@@ -264,7 +275,16 @@ class AssignmentController extends AbstractController
         $assignment->setStatus('CANCELLED');
         $assignment->setEndDate(new \DateTimeImmutable());
         $this->entityManager->flush();
-        
+
+        // Notifier l'agent : affectation annulée
+        $this->notificationService->send(
+            $assignment->getAgent(),
+            '🚫 Affectation annulée',
+            sprintf('Votre affectation au site "%s" a été annulée.', $assignment->getSite()->getName()),
+            'WARNING',
+            '/dashboard/agent/assignments'
+        );
+
         return $this->json([
             'message' => 'Assignment cancelled',
             'status' => 'CANCELLED',
@@ -288,7 +308,16 @@ class AssignmentController extends AbstractController
         $assignment->setStatus('COMPLETED');
         $assignment->setEndDate(new \DateTimeImmutable());
         $this->entityManager->flush();
-        
+
+        // Notifier l'agent : affectation terminée
+        $this->notificationService->send(
+            $assignment->getAgent(),
+            '✅ Affectation terminée',
+            sprintf('Votre affectation au site "%s" a été clôturée.', $assignment->getSite()->getName()),
+            'INFO',
+            '/dashboard/agent/assignments'
+        );
+
         return $this->json([
             'message' => 'Assignment completed',
             'status' => 'COMPLETED',
@@ -312,7 +341,16 @@ class AssignmentController extends AbstractController
         $assignment->setStatus('ACTIVE');
         $assignment->setEndDate(null);
         $this->entityManager->flush();
-        
+
+        // Notifier l'agent : affectation réactivée
+        $this->notificationService->send(
+            $assignment->getAgent(),
+            '🔄 Affectation réactivée',
+            sprintf('Votre affectation au site "%s" a été réactivée.', $assignment->getSite()->getName()),
+            'SUCCESS',
+            '/dashboard/agent/assignments'
+        );
+
         return $this->json([
             'message' => 'Assignment reactivated',
             'status' => 'ACTIVE',

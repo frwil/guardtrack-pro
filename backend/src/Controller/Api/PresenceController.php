@@ -7,6 +7,7 @@ use App\Entity\User;
 use App\Repository\AssignmentRepository;
 use App\Repository\PresenceRepository;
 use App\Repository\SiteRepository;
+use App\Service\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -22,7 +23,8 @@ class PresenceController extends AbstractController
         private EntityManagerInterface $entityManager,
         private PresenceRepository $presenceRepository,
         private SiteRepository $siteRepository,
-        private AssignmentRepository $assignmentRepository
+        private AssignmentRepository $assignmentRepository,
+        private NotificationService $notificationService
     ) {}
 
     #[Route('', name: 'api_presences_list', methods: ['GET'])]
@@ -198,6 +200,26 @@ class PresenceController extends AbstractController
         $this->entityManager->persist($presence);
         $this->entityManager->flush();
 
+        // Notifier l'agent : confirmation de pointage
+        $this->notificationService->send(
+            $user,
+            '✅ Pointage enregistré',
+            sprintf('Votre pointage sur le site "%s" a bien été enregistré à %s.', $site->getName(), $presence->getCheckIn()->format('H:i')),
+            'INFO',
+            '/dashboard/agent/presences'
+        );
+
+        // Alerte hiérarchie si score de suspicion élevé
+        if ($suspicionScore >= 50) {
+            $this->notificationService->notifyHierarchy(
+                $user,
+                '⚠️ Pointage suspect',
+                sprintf('Le pointage de %s sur "%s" a un score de suspicion de %d%%.', $user->getFullName(), $site->getName(), $suspicionScore),
+                'WARNING',
+                '/dashboard/controleur/presences'
+            );
+        }
+
         return $this->json([
             'id' => $presence->getId(),
             'checkIn' => $presence->getCheckIn()->format('c'),
@@ -264,6 +286,18 @@ class PresenceController extends AbstractController
 
         $this->entityManager->flush();
 
+        // Notifier l'agent : pointage validé
+        $agent = $presence->getAgent() ?? $presence->getRoundSite()?->getRound()?->getAgent();
+        if ($agent) {
+            $this->notificationService->send(
+                $agent,
+                '✅ Présence validée',
+                sprintf('Votre présence du %s sur le site "%s" a été validée par %s.', $presence->getCheckIn()->format('d/m/Y'), $presence->getSite()->getName(), $user->getFullName()),
+                'SUCCESS',
+                '/dashboard/agent/presences'
+            );
+        }
+
         return $this->json(['status' => 'VALIDATED']);
     }
 
@@ -291,6 +325,19 @@ class PresenceController extends AbstractController
         $presence->setRejectionReason($data['reason'] ?? null);
 
         $this->entityManager->flush();
+
+        // Notifier l'agent : pointage rejeté
+        $agent = $presence->getAgent() ?? $presence->getRoundSite()?->getRound()?->getAgent();
+        if ($agent) {
+            $reason = $presence->getRejectionReason() ? ' Motif : ' . $presence->getRejectionReason() : '';
+            $this->notificationService->send(
+                $agent,
+                '❌ Présence rejetée',
+                sprintf('Votre présence du %s sur le site "%s" a été rejetée par %s.%s', $presence->getCheckIn()->format('d/m/Y'), $presence->getSite()->getName(), $user->getFullName(), $reason),
+                'ERROR',
+                '/dashboard/agent/presences'
+            );
+        }
 
         return $this->json(['status' => 'REJECTED']);
     }
@@ -463,6 +510,18 @@ class PresenceController extends AbstractController
 
         $presence->resolve($user, $resolution, $note);
         $this->entityManager->flush();
+
+        // Notifier l'agent : litige résolu
+        $agent = $presence->getAgent() ?? $presence->getRoundSite()?->getRound()?->getAgent();
+        if ($agent) {
+            $this->notificationService->send(
+                $agent,
+                '⚖️ Litige de présence résolu',
+                sprintf('Le litige concernant votre présence du %s sur "%s" a été résolu par %s. Décision : %s.', $presence->getCheckIn()->format('d/m/Y'), $presence->getSite()->getName(), $user->getFullName(), $resolution ?? 'N/A'),
+                'INFO',
+                '/dashboard/agent/presences'
+            );
+        }
 
         return $this->json([
             'resolved' => true,

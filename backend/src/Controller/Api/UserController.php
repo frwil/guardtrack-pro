@@ -4,6 +4,7 @@ namespace App\Controller\Api;
 
 use App\Entity\User;
 use App\Repository\UserRepository;
+use App\Service\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -19,7 +20,8 @@ class UserController extends AbstractController
     public function __construct(
         private EntityManagerInterface $entityManager,
         private UserRepository $userRepository,
-        private UserPasswordHasherInterface $passwordHasher
+        private UserPasswordHasherInterface $passwordHasher,
+        private NotificationService $notificationService
     ) {
     }
 
@@ -146,7 +148,23 @@ class UserController extends AbstractController
         
         $this->entityManager->persist($user);
         $this->entityManager->flush();
-        
+
+        // Notifier le nouvel utilisateur : bienvenue
+        $roleLabel = match ($user->getRole()) {
+            'ROLE_AGENT'      => 'Agent',
+            'ROLE_CONTROLEUR' => 'Contrôleur',
+            'ROLE_SUPERVISEUR'=> 'Superviseur',
+            'ROLE_ADMIN'      => 'Administrateur',
+            default           => 'Utilisateur',
+        };
+        $this->notificationService->send(
+            $user,
+            '👋 Bienvenue sur GuardTrack',
+            sprintf('Votre compte %s a été créé. Vous pouvez dès maintenant vous connecter avec votre adresse e-mail.', $roleLabel),
+            'INFO',
+            '/dashboard'
+        );
+
         return $this->json($user->toArray(true), Response::HTTP_CREATED);
     }
 
@@ -233,9 +251,20 @@ class UserController extends AbstractController
             return $this->json(['error' => 'Cannot deactivate yourself'], Response::HTTP_BAD_REQUEST);
         }
         
-        $user->setIsActive(!$user->isActive());
+        $newStatus = !$user->isActive();
+        $user->setIsActive($newStatus);
         $this->entityManager->flush();
-        
+
+        // Notifier l'utilisateur concerné : statut modifié
+        $this->notificationService->send(
+            $user,
+            $newStatus ? '✅ Compte activé' : '🔒 Compte désactivé',
+            $newStatus
+                ? 'Votre compte a été activé. Vous pouvez vous connecter à l\'application.'
+                : 'Votre compte a été désactivé. Contactez un administrateur pour plus d\'informations.',
+            $newStatus ? 'SUCCESS' : 'ERROR'
+        );
+
         return $this->json(['isActive' => $user->isActive()]);
     }
 
