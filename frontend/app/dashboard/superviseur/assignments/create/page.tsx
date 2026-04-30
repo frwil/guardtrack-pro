@@ -189,7 +189,7 @@ export default function CreateAssignmentPage() {
     }
 
     if (!navigator.onLine) {
-      setErrors({ submit: 'Vous êtes hors ligne. Reconnectez-vous pour créer cette affectation.' });
+      alert('📵 Vous êtes hors ligne. Reconnectez-vous pour créer cette affectation.');
       return;
     }
 
