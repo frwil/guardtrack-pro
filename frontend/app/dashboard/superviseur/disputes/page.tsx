@@ -5,6 +5,7 @@ import {
   presencesService,
   Presence,
 } from "../../../../src/services/api/presences";
+import { getToken } from "../../../../src/services/storage/token";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faSpinner,
@@ -47,12 +48,12 @@ export default function DisputesPage() {
     setIsLoading(true);
     setError(null);
     try {
-      // ✅ Utiliser le service API avec la bonne URL
+      const token = getToken();
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/presences/disputes`,
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("guardtrack_token")}`, // ✅ Vérifier le nom de la clé
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -86,13 +87,14 @@ export default function DisputesPage() {
     setIsSubmitting(true);
     setError(null);
     try {
+      const token = getToken();
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/presences/${presenceId}/resolve-dispute`,
         {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("guardtrack_token")}`,
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ resolution, note: resolutionNote }),
         }
