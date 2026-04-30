@@ -59,7 +59,7 @@ export interface StoredRound {
 // ✅ Interface unifiée pour toutes les opérations de synchronisation
 export interface SyncOperation {
   id?: number;
-  type: "CREATE" | "UPDATE" | "DELETE" | "CREATE_ROUND" | "START_ROUND" | "VISIT_SITE" | "COMPLETE_ROUND";
+  type: "CREATE" | "UPDATE" | "DELETE" | "CREATE_ROUND" | "START_ROUND" | "VISIT_SITE" | "COMPLETE_ROUND" | "CHECK_OUT" | "VALIDATE" | "REJECT";
   entity: "presence" | "incident" | "timesheet" | "round" | "round_site" | "assignment";
   data: any;
   
