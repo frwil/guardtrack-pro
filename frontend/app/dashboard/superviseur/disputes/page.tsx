@@ -52,7 +52,7 @@ export default function DisputesPage() {
         `${process.env.NEXT_PUBLIC_API_URL}/presences/disputes`,
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`, // ✅ Vérifier le nom de la clé
+            Authorization: `Bearer ${localStorage.getItem("guardtrack_token")}`, // ✅ Vérifier le nom de la clé
           },
         }
       );
@@ -92,7 +92,7 @@ export default function DisputesPage() {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${localStorage.getItem("guardtrack_token")}`,
           },
           body: JSON.stringify({ resolution, note: resolutionNote }),
         }

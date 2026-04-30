@@ -130,6 +130,45 @@ class PresenceController extends AbstractController
         return $this->json(array_map(fn(Presence $p) => $this->formatPresence($p, true), $presences));
     }
 
+    /**
+     * Récupère les présences en litige
+     */
+    #[Route('/disputes', name: 'api_presences_disputes', methods: ['GET'])]
+    #[IsGranted('ROLE_SUPERVISEUR')]
+    public function getDisputes(): JsonResponse
+    {
+        $presences = $this->presenceRepository->findBy(
+            ['status' => Presence::STATUS_DISPUTED],
+            ['checkIn' => 'DESC']
+        );
+
+        return $this->json(array_map(fn(Presence $p) => [
+            'id' => $p->getId(),
+            'agent' => [
+                'id' => $p->getAgent()?->getId(),
+                'fullName' => $p->getAgent()?->getFullName(),
+            ],
+            'site' => [
+                'id' => $p->getSite()->getId(),
+                'name' => $p->getSite()->getName(),
+                'address' => $p->getSite()->getAddress(),
+            ],
+            'checkIn' => $p->getCheckIn()->format('c'),
+            'status' => $p->getStatus(),
+            'agentDeclared' => $p->getCheckIn() ? 'PRESENT' : 'ABSENT',
+            'controllerVerdict' => $p->getControllerVerdict(),
+            'controller' => $p->getController() ? [
+                'id' => $p->getController()->getId(),
+                'fullName' => $p->getController()->getFullName(),
+            ] : null,
+            'controllerComment' => $p->getControllerComment(),
+            'suspicionScore' => $p->getSuspicionScore(),
+            'photo' => $p->getPhoto(),
+            'gpsLatitude' => $p->getGpsLatitude(),
+            'gpsLongitude' => $p->getGpsLongitude(),
+        ], $presences));
+    }
+
     #[Route('/check-in', name: 'api_presences_checkin', methods: ['POST'])]
     #[IsGranted('ROLE_AGENT')]
     public function checkIn(Request $request): JsonResponse
@@ -445,44 +484,7 @@ class PresenceController extends AbstractController
         return min($score, 100);
     }
 
-    /**
-     * Récupère les présences en litige
-     */
-    #[Route('/disputes', name: 'api_presences_disputes', methods: ['GET'])]
-    #[IsGranted('ROLE_SUPERVISEUR')]
-    public function getDisputes(): JsonResponse
-    {
-        $presences = $this->presenceRepository->findBy(
-            ['status' => Presence::STATUS_DISPUTED],
-            ['checkIn' => 'DESC']
-        );
-
-        return $this->json(array_map(fn(Presence $p) => [
-            'id' => $p->getId(),
-            'agent' => [
-                'id' => $p->getAgent()?->getId(),
-                'fullName' => $p->getAgent()?->getFullName(),
-            ],
-            'site' => [
-                'id' => $p->getSite()->getId(),
-                'name' => $p->getSite()->getName(),
-                'address' => $p->getSite()->getAddress(),
-            ],
-            'checkIn' => $p->getCheckIn()->format('c'),
-            'status' => $p->getStatus(),
-            'agentDeclared' => $p->getCheckIn() ? 'PRESENT' : 'ABSENT',
-            'controllerVerdict' => $p->getControllerVerdict(),
-            'controller' => $p->getController() ? [
-                'id' => $p->getController()->getId(),
-                'fullName' => $p->getController()->getFullName(),
-            ] : null,
-            'controllerComment' => $p->getControllerComment(),
-            'suspicionScore' => $p->getSuspicionScore(),
-            'photo' => $p->getPhoto(),
-            'gpsLatitude' => $p->getGpsLatitude(),
-            'gpsLongitude' => $p->getGpsLongitude(),
-        ], $presences));
-    }
+    
 
     /**
      * Résout un litige
