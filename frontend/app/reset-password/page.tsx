@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authService } from '../../src/services/api/auth';
 import { useAppSettings } from '../../src/contexts/AppSettingsContext';
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token') ?? '';
@@ -45,7 +45,6 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-12 px-4">
       <div className="max-w-md w-full space-y-8">
-        {/* Logo */}
         <div className="text-center">
           {companyLogo
             ? <img src={companyLogo} alt={companyName} className="h-14 object-contain mx-auto" />
@@ -98,7 +97,6 @@ export default function ResetPasswordPage() {
                     {showPwd ? '👁️' : '👁️‍🗨️'}
                   </button>
                 </div>
-                {/* Indicateur de force */}
                 {password && (
                   <div className="mt-1.5 flex gap-1">
                     {[1,2,3,4].map((i) => (
@@ -148,5 +146,17 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
