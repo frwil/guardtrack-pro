@@ -728,7 +728,7 @@ class SyncManager {
   }
 
   /** Helper : met une opération quelconque en file d'attente */
-  async queue(entity: string, type: string, data: Record<string, unknown>): Promise<void> {
+  async queue(entity: SyncOperation["entity"], type: SyncOperation["type"], data: Record<string, unknown>): Promise<void> {
     await offlineDB.addToSyncQueue({
       type,
       entity,
