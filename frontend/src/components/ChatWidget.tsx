@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useChat } from '../hooks/useChat';
 import { useAuthStore } from '../stores/authStore';
 import { useTranslation } from '../contexts/I18nContext';
@@ -47,61 +47,64 @@ export function ChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Position déplaçable — persistée pour survivre aux rechargements
-  const [pos, setPos] = useState(() => {
+  // ─── Position déplaçable ────────────────────────────────────────
+  // On stocke les offsets accumulés par les déplacements successifs.
+  // base : right/bottom fixes ; offset : translate(x, y) appliqué dessus.
+  const [offset, setOffset] = useState(() => {
     try {
       const saved = localStorage.getItem('guardtrack_chat_pos');
       if (saved) return JSON.parse(saved);
     } catch {}
-    return { bottom: 16, right: 16 };
+    return { x: 0, y: 0 };
   });
-  const posRef = useRef(pos); // ref miroir pour le cleanup du drag
+  const offsetRef = useRef(offset);  // miroir toujours frais
+  offsetRef.current = offset;
+
   const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef<{ x: number; y: number; b: number; r: number } | null>(null);
-  const movedDistance = useRef(0); // pour distinguer clic et déplacement
+  const dragCtx = useRef<{
+    sx: number; sy: number;   // position souris au mousedown
+    ox: number; oy: number;   // offset au mousedown
+    moved: boolean;
+  } | null>(null);
 
-  // Synchroniser le ref avec le state
-  posRef.current = pos;
-
-  const onDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+  const onDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     const cx = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const cy = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    dragStart.current = { x: cx, y: cy, b: posRef.current.bottom, r: posRef.current.right };
-    movedDistance.current = 0;
+    const cur = offsetRef.current;
+    dragCtx.current = { sx: cx, sy: cy, ox: cur.x, oy: cur.y, moved: false };
 
-    const move = (ev: MouseEvent | TouchEvent) => {
-      if (!dragStart.current) return;
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      ev.preventDefault();
+      if (!dragCtx.current) return;
       const mx = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
       const my = 'touches' in ev ? (ev as TouchEvent).touches[0].clientY : (ev as MouseEvent).clientY;
-      const dx = mx - dragStart.current.x;
-      const dy = my - dragStart.current.y;
-      movedDistance.current = Math.sqrt(dx * dx + dy * dy);
-      if (movedDistance.current > 3) setIsDragging(true);
-      const newPos = {
-        bottom: Math.max(8, Math.min(window.innerHeight - 72, dragStart.current.b - dy)),
-        right:  Math.max(8, Math.min(window.innerWidth  - 64, dragStart.current.r - dx)),
-      };
-      setPos(newPos);
+      const dx = mx - dragCtx.current.sx;
+      const dy = my - dragCtx.current.sy;
+      if (Math.abs(dx) + Math.abs(dy) > 3) dragCtx.current.moved = true;
+      if (dragCtx.current.moved) setIsDragging(true);
+      // Mise à jour directe — pas de rAF, React 18 batch automatiquement
+      setOffset({ x: dragCtx.current.ox + dx, y: dragCtx.current.oy + dy });
     };
-    const up = () => {
-      // Persister la position pour les prochains chargements
-      if (movedDistance.current > 3) {
-        try { localStorage.setItem('guardtrack_chat_pos', JSON.stringify(posRef.current)); } catch {}
+
+    const onUp = () => {
+      if (dragCtx.current?.moved) {
+        try { localStorage.setItem('guardtrack_chat_pos', JSON.stringify(offsetRef.current)); } catch {}
       }
-      dragStart.current = null;
-      // On garde isDragging à true un court instant pour éviter le clic parasite
-      setTimeout(() => setIsDragging(false), 150);
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      window.removeEventListener('touchmove', move);
-      window.removeEventListener('touchend', up);
+      dragCtx.current = null;
+      setTimeout(() => setIsDragging(false), 200);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-    window.addEventListener('touchmove', move, { passive: false });
-    window.addEventListener('touchend', up);
-  };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
+  }, []);
 
   // Traduction sortante
   const [showLangPicker, setShowLangPicker] = useState(false);
@@ -313,7 +316,14 @@ export function ChatWidget() {
 
   return (
     <div
-      style={{ position: 'fixed', bottom: pos.bottom, right: pos.right, zIndex: 40 }}
+      style={{
+        position: 'fixed',
+        bottom: 16,
+        right: 16,
+        transform: `translate(${offset.x}px, ${offset.y}px)`,
+        zIndex: 40,
+        willChange: isDragging ? 'transform' : 'auto',
+      }}
       className="flex flex-col-reverse items-end gap-3"
     >
       {/* Bouton d'ouverture */}
@@ -364,7 +374,11 @@ export function ChatWidget() {
                     : t('chat.title')}
               </h3>
             </div>
-            <div className="flex items-center space-x-3" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+            <div
+              className="flex items-center space-x-3"
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
               <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
               {!currentConversation && !showNewConv && (
                 <button onClick={handleOpenNewConv} className="hover:text-gray-200" title={t('chat.newConversation')}>
