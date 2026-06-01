@@ -137,6 +137,52 @@ export default function LoginPage() {
     }
   };
 
+  // Connexion rapide en un clic (test)
+  const handleQuickLogin = async (
+    quickEmail: string,
+    quickPassword: string,
+    quickMode: "password" | "pin"
+  ) => {
+    setEmail(quickEmail);
+    setMode(quickMode);
+    clearError();
+    if (quickMode === "password") {
+      setPassword(quickPassword);
+      setPin("");
+    } else {
+      setPin(quickPassword);
+      setPassword("");
+    }
+    // Laisser React mettre à jour le state avant de lancer l'auth
+    await new Promise((r) => setTimeout(r, 50));
+    let success = false;
+    if (quickMode === "password") {
+      success = await login(quickEmail, quickPassword, false);
+    } else {
+      success = await loginWithPin(quickEmail, quickPassword, false);
+    }
+    if (success) {
+      const { user } = useAuthStore.getState();
+      switch (user?.role) {
+        case "AGENT":
+          router.push("/dashboard/agent");
+          break;
+        case "CONTROLEUR":
+          router.push("/dashboard/controleur");
+          break;
+        case "SUPERVISEUR":
+          router.push("/dashboard/superviseur");
+          break;
+        case "ADMIN":
+        case "SUPERADMIN":
+          router.push("/dashboard/admin");
+          break;
+        default:
+          router.push("/dashboard");
+      }
+    }
+  };
+
   return (
     <>
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -385,30 +431,81 @@ export default function LoginPage() {
             </div>
           </form>
 
-          {/* Informations de test */}
-          <div className="text-center space-y-1">
-            <p className="text-xs text-gray-500">
+          {/* Connexions rapides (test) */}
+          <div className="rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/50 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-600 text-sm">🧪</span>
+              <h3 className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                Connexion rapide (test)
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => {
-                  setEmail("superadmin@guardtrack.pro");
-                  setPassword("password123");
-                  setMode("password");
-                }}
-                className="text-indigo-600 hover:text-indigo-800 underline decoration-dotted"
+                type="button"
+                disabled={isLoading}
+                onClick={() =>
+                  handleQuickLogin("rkamga@guardtrack.cm", "password123", "password")
+                }
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 disabled:opacity-50 transition-colors"
+                title="Agent — mot de passe"
               >
-                🧪 SuperAdmin
+                👮 Agent
               </button>
-              {" • "}
               <button
-                onClick={() => {
-                  setEmail("agent@guardtrack.pro");
-                  setPin("12345");
-                  setMode("pin");
-                }}
-                className="text-indigo-600 hover:text-indigo-800 underline decoration-dotted"
+                type="button"
+                disabled={isLoading}
+                onClick={() =>
+                  handleQuickLogin("rkamga@guardtrack.cm", "12345", "pin")
+                }
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 disabled:opacity-50 transition-colors"
+                title="Agent — code PIN"
               >
-                🧪 Agent (PIN)
+                👮 Agent (PIN)
               </button>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() =>
+                  handleQuickLogin("betoundi@guardtrack.cm", "password123", "password")
+                }
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 disabled:opacity-50 transition-colors"
+              >
+                🛂 Contrôleur
+              </button>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() =>
+                  handleQuickLogin("afokam@guardtrack.cm", "password123", "password")
+                }
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-violet-100 text-violet-800 hover:bg-violet-200 disabled:opacity-50 transition-colors"
+              >
+                👔 Superviseur
+              </button>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() =>
+                  handleQuickLogin("cngonlend@guardtrack.cm", "password123", "password")
+                }
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-orange-100 text-orange-800 hover:bg-orange-200 disabled:opacity-50 transition-colors"
+              >
+                ⚙️ Admin
+              </button>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() =>
+                  handleQuickLogin("jptchomtchoua@guardtrack.cm", "password123", "password")
+                }
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-red-100 text-red-800 hover:bg-red-200 disabled:opacity-50 transition-colors"
+              >
+                👑 SuperAdmin
+              </button>
+            </div>
+            <p className="text-[10px] text-amber-600/70">
+              Mot de passe universel : <code className="bg-amber-100 px-1 rounded">password123</code>
+              {" — "}PIN agent : <code className="bg-amber-100 px-1 rounded">12345</code>
             </p>
           </div>
 
