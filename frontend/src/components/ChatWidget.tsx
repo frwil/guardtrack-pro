@@ -318,11 +318,9 @@ export function ChatWidget() {
     <div
       style={{
         position: 'fixed',
-        bottom: 16,
-        right: 16,
-        transform: `translate(${offset.x}px, ${offset.y}px)`,
+        bottom: `${80 - offset.y}px`,
+        right: `${16 - offset.x}px`,
         zIndex: 40,
-        willChange: isDragging ? 'transform' : 'auto',
       }}
       className="flex flex-col-reverse items-end gap-3"
     >
