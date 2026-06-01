@@ -47,30 +47,51 @@ export function ChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Position déplaçable
-  const [pos, setPos] = useState({ bottom: 16, right: 16 });
+  // Position déplaçable — persistée pour survivre aux rechargements
+  const [pos, setPos] = useState(() => {
+    try {
+      const saved = localStorage.getItem('guardtrack_chat_pos');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { bottom: 16, right: 16 };
+  });
+  const posRef = useRef(pos); // ref miroir pour le cleanup du drag
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number; b: number; r: number } | null>(null);
+  const movedDistance = useRef(0); // pour distinguer clic et déplacement
+
+  // Synchroniser le ref avec le state
+  posRef.current = pos;
 
   const onDragStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     const cx = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const cy = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    dragStart.current = { x: cx, y: cy, b: pos.bottom, r: pos.right };
-    setIsDragging(true);
+    dragStart.current = { x: cx, y: cy, b: posRef.current.bottom, r: posRef.current.right };
+    movedDistance.current = 0;
 
     const move = (ev: MouseEvent | TouchEvent) => {
       if (!dragStart.current) return;
       const mx = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
       const my = 'touches' in ev ? (ev as TouchEvent).touches[0].clientY : (ev as MouseEvent).clientY;
-      setPos({
-        bottom: Math.max(8, Math.min(window.innerHeight - 72, dragStart.current.b - (my - dragStart.current.y))),
-        right:  Math.max(8, Math.min(window.innerWidth  - 64, dragStart.current.r - (mx - dragStart.current.x))),
-      });
+      const dx = mx - dragStart.current.x;
+      const dy = my - dragStart.current.y;
+      movedDistance.current = Math.sqrt(dx * dx + dy * dy);
+      if (movedDistance.current > 3) setIsDragging(true);
+      const newPos = {
+        bottom: Math.max(8, Math.min(window.innerHeight - 72, dragStart.current.b - dy)),
+        right:  Math.max(8, Math.min(window.innerWidth  - 64, dragStart.current.r - dx)),
+      };
+      setPos(newPos);
     };
     const up = () => {
+      // Persister la position pour les prochains chargements
+      if (movedDistance.current > 3) {
+        try { localStorage.setItem('guardtrack_chat_pos', JSON.stringify(posRef.current)); } catch {}
+      }
       dragStart.current = null;
-      setIsDragging(false);
+      // On garde isDragging à true un court instant pour éviter le clic parasite
+      setTimeout(() => setIsDragging(false), 150);
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       window.removeEventListener('touchmove', move);
@@ -328,6 +349,7 @@ export function ChatWidget() {
               {(currentConversation || showNewConv) && (
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                   onClick={() => { setCurrentConversation(null); setShowNewConv(false); }}
                   className="hover:text-gray-200"
                 >
@@ -342,7 +364,7 @@ export function ChatWidget() {
                     : t('chat.title')}
               </h3>
             </div>
-            <div className="flex items-center space-x-3" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center space-x-3" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
               <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
               {!currentConversation && !showNewConv && (
                 <button onClick={handleOpenNewConv} className="hover:text-gray-200" title={t('chat.newConversation')}>
